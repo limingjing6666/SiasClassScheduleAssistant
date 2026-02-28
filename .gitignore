@@ -1,0 +1,43 @@
+# Compiled class files
+**/target/
+
+# IDE
+**/.idea/
+**/*.iml
+**/.vscode/
+
+# Maven wrapper
+!**/.mvn/wrapper/maven-wrapper.jar
+
+# Environment
+**/.env
+**/*.log
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/.venv/
+**/venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+**/out/
+**/build/
+
+# Node
+**/node_modules/
+
+# UNPACKAGE
+**/unpackage/
+
+# Hubilder
+**/.hubuilder/
+
+#Dist
+**/dist/
+
+#GitHub
+**/.github/

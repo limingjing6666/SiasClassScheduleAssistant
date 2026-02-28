@@ -1,0 +1,47 @@
+/**
+ * uni.scss 全局样式变量
+ */
+
+/* 主题色 */
+$primary-color: #4A90D9;
+$primary-light: #7EB3E5;
+$primary-dark: #3A7BC0;
+
+/* 辅助色 */
+$success-color: #52C41A;
+$warning-color: #FAAD14;
+$error-color: #FF4D4F;
+
+/* 文字色 */
+$text-color: #333333;
+$text-secondary: #666666;
+$text-placeholder: #999999;
+
+/* 背景色 */
+$bg-color: #F5F5F5;
+$bg-white: #FFFFFF;
+$bg-gray: #F8F8F8;
+
+/* 边框色 */
+$border-color: #E8E8E8;
+$border-light: #F0F0F0;
+
+/* 间距 */
+$spacing-xs: 8rpx;
+$spacing-sm: 16rpx;
+$spacing-md: 24rpx;
+$spacing-lg: 32rpx;
+$spacing-xl: 48rpx;
+
+/* 字体大小 */
+$font-size-xs: 20rpx;
+$font-size-sm: 24rpx;
+$font-size-md: 28rpx;
+$font-size-lg: 32rpx;
+$font-size-xl: 36rpx;
+
+/* 圆角 */
+$border-radius-sm: 8rpx;
+$border-radius-md: 12rpx;
+$border-radius-lg: 20rpx;
+$border-radius-full: 9999rpx;
