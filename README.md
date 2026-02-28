@@ -98,11 +98,6 @@ docker-compose ps        # 查看状态
 docker-compose logs -f   # 查看日志
 ```
 
-## ⚠️ 注意事项
-
-- 敏感配置请使用环境变量，不要硬编码
-- Python 路径需根据实际环境配置
-- 教务系统结构变化可能需要更新爬虫脚本
 
 ## 📄 License
 
