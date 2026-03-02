@@ -18,10 +18,11 @@ import type { Course } from '@/types';
 
 class CookieJar {
   private cookies: Record<string, string> = {};
+  private _disabled = false;
 
   /** 从 Set-Cookie 响应头解析并存储 cookie */
   update(setCookieHeaders: string | string[] | undefined): void {
-    if (!setCookieHeaders) return;
+    if (this._disabled || !setCookieHeaders) return;
     const headers = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders];
     for (const header of headers) {
       // 每条 Set-Cookie 形如: "JSESSIONID=abc123; Path=/; HttpOnly"
@@ -40,6 +41,7 @@ class CookieJar {
 
   /** 生成 Cookie 请求头字符串 */
   toString(): string {
+    if (this._disabled) return '';
     return Object.entries(this.cookies)
       .map(([k, v]) => `${k}=${v}`)
       .join('; ');
@@ -47,6 +49,17 @@ class CookieJar {
 
   clear(): void {
     this.cookies = {};
+  }
+
+  /** 永久禁用：清空所有 cookie，且后续 update/toString 均为空操作 */
+  disable(): void {
+    this.cookies = {};
+    this._disabled = true;
+  }
+
+  /** 是否已禁用 */
+  isDisabled(): boolean {
+    return this._disabled;
   }
 }
 
@@ -131,16 +144,15 @@ function uniRequest(
 
 // #ifndef H5
 /**
- * App 原生模式 —— 使用 uni.request，依赖原生 Cookie 管理
+ * App 原生模式 —— 使用 uni.request + 手动 CookieJar 管理
  *
- * ★ 重要：HBuilderX 3.6.7+ 的 uni.request 会自动在请求间保持 Cookie。
- *   登录 POST → 302 重定向时，服务器在 302 响应中设置新 JSESSIONID，
- *   原生 HTTP 客户端（Android OkHttp / iOS NSURLSession）会自动保存并在后续请求中携带。
+ * ★ 原生平台的自动 Cookie 管理在部分运行时版本/设备上不可靠，
+ *   实测 GET /login.action 设置的 JSESSIONID 未被自动带入 POST，
+ *   导致服务器返回 "验证码不正确"（即 session 校验失败）。
  *
- *   如果我们手动注入 Cookie 头，会**覆盖**原生客户端保存的正确 Cookie，
- *   导致后续请求使用失效的旧 session → 服务器认为未登录。
- *
- *   因此 App 模式下 **不手动管理 Cookie**，完全交给原生平台处理。
+ *   因此改为完全手动管理 Cookie（等同 Python requests.Session）：
+ *   - 每次响应：解析 Set-Cookie 并写入 CookieJar
+ *   - 每次请求：从 CookieJar 读取 Cookie 并注入请求头
  */
 function uniRequest(
   url: string,
@@ -153,10 +165,10 @@ function uniRequest(
   }
 ): Promise<RequestResult> {
   return new Promise((resolve, reject) => {
-    const { method = 'GET', header = {}, data, timeout = 15000 } = options;
+    const { method = 'GET', header = {}, data, cookieJar, timeout = 15000 } = options;
 
-    // ★ 不设置 Cookie 头 —— 让原生平台自动管理 Cookie
-    // 移除 header 中可能残留的 Cookie 字段，避免覆盖原生 Cookie
+    // ★ App 原生模式不手动注入 Cookie 头 —— 完全交给原生 HTTP 客户端（OkHttp / NSURLSession）自动管理。
+    // 登录前通过 GET /logout.action 清除旧 session，确保原生客户端 cookie 干净。
     const cleanHeaders: Record<string, string> = {};
     for (const [k, v] of Object.entries(header)) {
       if (k.toLowerCase() !== 'cookie') {
@@ -173,6 +185,36 @@ function uniRequest(
       dataType: 'text',
       sslVerify: false,
       success: (res) => {
+        // ★ 从响应中解析 Set-Cookie → 更新 CookieJar
+        // uni.request 返回头的 key 大小写不一致（Set-Cookie / set-cookie / SET-COOKIE...），
+        // 必须做大小写无关匹配
+        let rawSetCookie: string | string[] | undefined;
+        for (const key of Object.keys(res.header || {})) {
+          if (key.toLowerCase() === 'set-cookie') {
+            rawSetCookie = (res.header as Record<string, string | string[]>)[key];
+            break;
+          }
+        }
+        // 首次请求打印所有响应头 key，帮助诊断
+        console.log(`[App headers] ${method} ${url.split('/eams')[1] || url}: keys=[${Object.keys(res.header || {}).join(', ')}]`);
+
+        if (rawSetCookie) {
+          // 有些运行时用逗号拼接多条，有些用数组，有些只返回一条
+          let cookies: string[];
+          if (Array.isArray(rawSetCookie)) {
+            cookies = rawSetCookie;
+          } else if (typeof rawSetCookie === 'string') {
+            // 按逗号分割，但避免拆开 "expires=Thu, 01 Jan 2099..."
+            cookies = rawSetCookie.split(/,\s*(?=[A-Za-z_][A-Za-z0-9_]*=)/)
+          } else {
+            cookies = [String(rawSetCookie)];
+          }
+          cookieJar.update(cookies);
+          console.log(`[App cookie] Updated from ${method} ${url.split('/eams')[1] || url}: ${cookieJar.toString().substring(0, 200)}`);
+        } else {
+          console.log(`[App cookie] No Set-Cookie in ${method} ${url.split('/eams')[1] || url}`);
+        }
+
         const text = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
         console.log(`[App request] ${method} ${url.split('/eams')[1] || url} → ${text.length} bytes, status: ${res.statusCode}`);
 
@@ -292,6 +334,22 @@ export class SiasCrawler {
   // ----------------------------------------------------------
   async login(): Promise<boolean> {
     try {
+      // 0. ★ 先注销旧 session，确保原生 HTTP 客户端的 cookie 是干净的
+      //    解决切换账号时 OkHttp 残留旧 JSESSIONID 导致登录失败的问题
+      try {
+        await uniRequest(`${this.baseUrl}/logout.action`, {
+          method: 'GET',
+          header: { ...this.headers },
+          cookieJar: this.cookieJar,
+          timeout: 5000
+        });
+        console.log('[login] Pre-logout completed');
+      } catch {
+        // 忽略登出失败（可能本来就没有 session）
+        console.log('[login] Pre-logout failed (ignored)');
+      }
+      await sleep(500);
+
       // 1. GET /login.action，获取 salt 并建立会话 Cookie
       const resp = await requestWithRetry(`${this.baseUrl}/login.action`, {
         method: 'GET',
@@ -374,10 +432,16 @@ export class SiasCrawler {
         timeout: 10000
       });
       console.log('[autoDetect] Shell len:', resShell.text.length, 'rateLimited:', isRateLimited(resShell.text));
+      // ★ 诊断：打印 HTML 片段，看服务器返回的是什么页面
+      console.log('[autoDetect] Shell HTML preview:', resShell.text.substring(0, 500));
 
       // 2. 提取跳转链接 bg.Go(...)
       const match = resShell.text.match(/bg\.Go\('([^']+)'/);
       console.log('[autoDetect] bg.Go match:', match ? match[1] : 'NOT FOUND');
+
+      // ★ 备选：也试 semester.id、ids 等直接从 shell 页面提取
+      this.scanHtmlForInfo(resShell.text);
+      console.log('[autoDetect] After shell scan → userId:', this.userId, 'semesterId:', this.currentSemesterId);
 
       if (match) {
         let innerUrl = match[1];
@@ -552,7 +616,17 @@ export class SiasCrawler {
       throw new Error('RATE_LIMITED');
     }
 
-    return this.parse(res.text);
+    // ★ 诊断日志
+    console.log('[getData] Response preview:', res.text.substring(0, 500));
+    console.log('[getData] Contains "var teachers":', res.text.includes('var teachers'));
+    console.log('[getData] Contains "TaskActivity":', res.text.includes('TaskActivity'));
+
+    const parsed = this.parse(res.text);
+    console.log('[getData] Parsed courses count:', parsed.length);
+    if (parsed.length > 0) {
+      console.log('[getData] First course:', JSON.stringify(parsed[0]));
+    }
+    return parsed;
   }
 
   // ----------------------------------------------------------

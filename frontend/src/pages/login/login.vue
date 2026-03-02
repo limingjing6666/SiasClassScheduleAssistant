@@ -100,6 +100,9 @@ async function handleLogin() {
   loading.value = true;
 
   try {
+    // ★ 切换账号时先清除旧数据，防止残留上一个账号的课程
+    scheduleStore.clearData();
+
     // 调用API同步课表
     const courses = await syncSchedule({
       username: username.value.trim(),
