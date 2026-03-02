@@ -1,65 +1,25 @@
-import type { ApiResponse, Course, SyncRequest } from '@/types';
-import { API } from './config';
-
 /**
- * 封装的请求方法
+ * 课表 API 层 —— 纯本地版
+ *
+ * 不再请求 Java 后端，直接调用本地 crawler.ts 爬虫工具。
+ * 缓存数据通过 Pinia store + uni.setStorageSync 管理。
  */
-function request<T>(options: UniApp.RequestOptions): Promise<ApiResponse<T>> {
-  return new Promise((resolve, reject) => {
-    uni.request({
-      ...options,
-      success: (res) => {
-        const data = res.data as ApiResponse<T>;
-        if (data.code === 200) {
-          resolve(data);
-        } else {
-          reject(new Error(data.msg || '请求失败'));
-        }
-      },
-      fail: (err) => {
-        reject(new Error(err.errMsg || '网络错误'));
-      }
-    });
-  });
-}
+
+import type { Course, SyncRequest } from '@/types';
+import { fetchSchedule as crawlerFetch, translateError } from '@/utils/crawler';
 
 /**
  * 同步课表
+ * 直接调用爬虫登录教务系统并抓取课表数据
  */
 export async function syncSchedule(params: SyncRequest): Promise<Course[]> {
-  const res = await request<Course[]>({
-    url: API.SYNC_SCHEDULE,
-    method: 'POST',
-    header: {
-      'Content-Type': 'application/json'
-    },
-    data: params
-  });
-  return res.data;
-}
-
-/**
- * 获取缓存的课表
- */
-export async function getSchedule(studentId: string): Promise<Course[]> {
-  const res = await request<Course[]>({
-    url: API.GET_SCHEDULE(studentId),
-    method: 'GET'
-  });
-  return res.data;
-}
-
-/**
- * 健康检查
- */
-export async function healthCheck(): Promise<boolean> {
   try {
-    await request<string>({
-      url: API.HEALTH,
-      method: 'GET'
-    });
-    return true;
-  } catch {
-    return false;
+    const courses = await crawlerFetch(params.username, params.password);
+    return courses;
+  } catch (err: unknown) {
+    // 将爬虫错误码翻译为友好消息后抛出
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(translateError(msg));
   }
 }
+

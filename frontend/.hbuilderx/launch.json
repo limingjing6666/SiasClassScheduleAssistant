@@ -2,6 +2,8 @@
     "version" : "1.0",
     "configurations" : [
         {
+            "customPlaygroundType" : "device",
+            "localRepoPath" : "D:/Javaidea_Project/SiasClassScheduleAssistant/frontend",
             "playground" : "standard",
             "type" : "uni-app:app-android"
         }

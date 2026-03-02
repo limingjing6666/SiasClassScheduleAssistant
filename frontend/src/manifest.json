@@ -9,6 +9,11 @@
         "usingComponents" : true,
         "nvueCompiler" : "uni-app",
         "compilerVersion" : 3,
+        "statusbar" : {
+            "immersive" : true,
+            "style" : "light",
+            "background" : "#1C1410"
+        },
         "splashscreen" : {
             "alwaysShowBeforeRender" : true,
             "waiting" : true,
@@ -67,16 +72,6 @@
         },
         "usingComponents" : true
     },
-    "h5" : {
-        "devServer" : {
-            "port" : 3000,
-            "proxy" : {
-                "/api" : {
-                    "target" : "http://localhost:8088",
-                    "changeOrigin" : true
-                }
-            }
-        }
-    },
+    "h5" : {},
     "vueVersion" : "3"
 }

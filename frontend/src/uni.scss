@@ -1,30 +1,30 @@
 /**
- * uni.scss 全局样式变量
+ * uni.scss 全局样式变量 —— 暖色大地色系深色主题
  */
 
 /* 主题色 */
-$primary-color: #4A90D9;
-$primary-light: #7EB3E5;
-$primary-dark: #3A7BC0;
+$primary-color: #C87A3C;
+$primary-light: #D4975A;
+$primary-dark: #8B4A1A;
 
 /* 辅助色 */
-$success-color: #52C41A;
-$warning-color: #FAAD14;
-$error-color: #FF4D4F;
+$success-color: #6B8A4A;
+$warning-color: #C8A030;
+$error-color: #9A4A3E;
 
 /* 文字色 */
-$text-color: #333333;
-$text-secondary: #666666;
-$text-placeholder: #999999;
+$text-color: #F0E6D8;
+$text-secondary: rgba(240, 230, 216, 0.6);
+$text-placeholder: rgba(240, 230, 216, 0.25);
 
 /* 背景色 */
-$bg-color: #F5F5F5;
-$bg-white: #FFFFFF;
-$bg-gray: #F8F8F8;
+$bg-color: #1C1410;
+$bg-card: #2A1E16;
+$bg-surface: #211912;
 
 /* 边框色 */
-$border-color: #E8E8E8;
-$border-light: #F0F0F0;
+$border-color: rgba(200, 122, 60, 0.2);
+$border-light: rgba(200, 122, 60, 0.1);
 
 /* 间距 */
 $spacing-xs: 8rpx;

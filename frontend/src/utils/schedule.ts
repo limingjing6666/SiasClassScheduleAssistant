@@ -1,12 +1,28 @@
 import type { Course, RenderCourse } from '@/types';
 
 /**
- * 预设颜色数组 - 更鲜艳的渐变色系
+ * 预设颜色数组 - 暖色大地色系
  */
 const COLORS = [
-  '#74b9ff', '#81ecec', '#a29bfe', '#fd79a8',
-  '#ffeaa7', '#55efc4', '#fab1a0', '#dfe6e9',
-  '#00cec9', '#e17055', '#fdcb6e', '#b2bec3'
+  '#8B4A1A', // 铁锈棕
+  '#C8B89A', // 驼色/卡其
+  '#7A2A1E', // 酒红/暗红
+  '#5A4A10', // 橄榄绿
+  '#A0522D', // 赭石/黄褐
+  '#8B6914', // 暗金
+  '#6B3A2A', // 深棕
+  '#4A6A2A', // 苔绿
+  '#9B5A3A', // 铜色
+  '#7A6A3A', // 暗卡其
+  '#5A3A2A', // 巧克力
+  '#8B7A4A', // 暗驼
+];
+
+/** 暖色边框色 —— 与 COLORS 一一对应（略浅的同系色） */
+export const GLOW_COLORS = [
+  '#B06A3A', '#D8CDB0', '#9A4A3E', '#7A6A30',
+  '#C07240', '#AB8934', '#8B5A4A', '#6A8A4A',
+  '#BB7A5A', '#9A8A5A', '#7A5A4A', '#AB9A6A',
 ];
 
 /**
@@ -100,11 +116,16 @@ export function toRenderCourses(courses: Course[]): RenderCourse[] {
     
     lastColorByDay[course.day] = color;
 
+    // 获取对应的发光色
+    const colorIndex = COLORS.indexOf(color);
+    const glowColor = colorIndex >= 0 ? GLOW_COLORS[colorIndex] : GLOW_COLORS[0];
+
     return {
       ...course,
       startNode: start,
       step: step,
-      color: color
+      color: color,
+      glowColor: glowColor
     };
   });
 }
@@ -137,27 +158,6 @@ export const NODE_TIMES: Record<number, { start: string; end: string }> = {
 };
 
 /**
- * 获取节次名称
- */
-export function getNodeName(node: number): string {
-  return `第${node}节`;
-}
-
-/**
- * 获取节次开始时间
- */
-export function getNodeStartTime(node: number): string {
-  return NODE_TIMES[node]?.start || '';
-}
-
-/**
- * 获取节次结束时间
- */
-export function getNodeEndTime(node: number): string {
-  return NODE_TIMES[node]?.end || '';
-}
-
-/**
  * 获取节次时间范围字符串（如 "08:00-09:40"）
  */
 export function getNodeTimeRange(startNode: number, endNode: number): string {
@@ -166,23 +166,4 @@ export function getNodeTimeRange(startNode: number, endNode: number): string {
   return start && end ? `${start}-${end}` : '';
 }
 
-/**
- * 格式化日期
- */
-export function formatDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
-/**
- * 计算当前是学期第几周
- * @param semesterStart 学期开始日期
- */
-export function calculateCurrentWeek(semesterStart: Date): number {
-  const now = new Date();
-  const diff = now.getTime() - semesterStart.getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  return Math.floor(days / 7) + 1;
-}

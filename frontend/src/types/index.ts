@@ -17,18 +17,6 @@ export interface Course {
 }
 
 /**
- * API响应接口
- */
-export interface ApiResponse<T> {
-  /** 状态码 */
-  code: number;
-  /** 消息 */
-  msg: string;
-  /** 数据 */
-  data: T;
-}
-
-/**
  * 同步请求接口
  */
 export interface SyncRequest {
@@ -60,4 +48,6 @@ export interface RenderCourse extends Course {
   step: number;
   /** 背景颜色 */
   color: string;
+  /** 暖色边框色 */
+  glowColor: string;
 }

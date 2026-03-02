@@ -5,11 +5,15 @@
       "style": {
         "navigationBarTitleText": "",
         "navigationStyle": "custom",
+        "navigationBarBackgroundColor": "#1C1410",
         "disableScroll": true,
         "app-plus": {
           "titleNView": false,
           "bounce": "none",
-          "scrollIndicator": "none"
+          "scrollIndicator": "none",
+          "statusBar": {
+            "style": "light"
+          }
         }
       }
     },
@@ -18,14 +22,20 @@
       "style": {
         "navigationBarTitleText": "",
         "navigationStyle": "custom",
-        "navigationBarTextStyle": "white"
+        "navigationBarTextStyle": "white",
+        "navigationBarBackgroundColor": "#1C1410",
+        "app-plus": {
+          "statusBar": {
+            "style": "light"
+          }
+        }
       }
     }
   ],
   "globalStyle": {
     "navigationBarTextStyle": "white",
     "navigationBarTitleText": "西亚斯课表",
-    "navigationBarBackgroundColor": "#667eea",
-    "backgroundColor": "#F8F8F8"
+    "navigationBarBackgroundColor": "#1C1410",
+    "backgroundColor": "#1C1410"
   }
 }

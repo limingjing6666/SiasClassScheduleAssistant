@@ -11,10 +11,12 @@
     "build:app": "uni build -p app-android"
   },
   "dependencies": {
+    "crypto-js": "^4.2.0",
     "pinia": "^2.1.7",
     "vue": "^3.4.21"
   },
   "devDependencies": {
+    "@types/crypto-js": "^4.2.2",
     "@dcloudio/types": "^3.4.8",
     "@dcloudio/uni-app": "3.0.0-4010520240507001",
     "@dcloudio/uni-app-plus": "3.0.0-4010520240507001",

@@ -138,11 +138,11 @@ async function handleLogin() {
 
 <style scoped>
 /* ============================================
-   基础 / 移动端样式 (默认)
+   深色主题 —— 暖色大地色系 (登录页)
    ============================================ */
 .login-page {
   height: 100vh;
-  background: #f0f2f7;
+  background: #1C1410;
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -156,15 +156,16 @@ async function handleLogin() {
   overflow: hidden;
 }
 
-/* 登录卡片 - 移动端浮动居中 */
+/* 登录卡片 */
 .login-card {
   width: 90%;
   max-width: 700rpx;
   margin: 0 auto;
   margin-top: calc((100vh - 1100rpx) / 2);
-  background: #ffffff;
+  background: #2A1E16;
+  border: 1rpx solid rgba(200, 122, 60, 0.2);
   border-radius: 36rpx;
-  box-shadow: 0 12rpx 60rpx rgba(0, 0, 0, 0.10);
+  box-shadow: 0 12rpx 60rpx rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -184,7 +185,7 @@ async function handleLogin() {
   border-radius: 36rpx 36rpx 0 0;
 }
 
-/* Web端侧边栏装饰图（移动端隐藏） */
+/* Web端侧边栏装饰图 */
 .side-banner {
   display: none;
 }
@@ -199,14 +200,14 @@ async function handleLogin() {
 .welcome-title {
   font-size: 48rpx;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #ffffff;
   margin-bottom: 12rpx;
   letter-spacing: 2rpx;
 }
 
 .welcome-desc {
   font-size: 26rpx;
-  color: #8e8e9a;
+  color: rgba(240, 230, 216, 0.45);
   line-height: 1.6;
 }
 
@@ -223,35 +224,48 @@ async function handleLogin() {
   display: block;
   font-size: 28rpx;
   font-weight: 600;
-  color: #1a1a2e;
+  color: rgba(240, 230, 216, 0.75);
   margin-bottom: 12rpx;
 }
 
 .field-input-wrap {
-  border: 2rpx solid #e4e4ec;
+  border: 2rpx solid rgba(200, 122, 60, 0.25);
   border-radius: 16rpx;
   padding: 0 28rpx;
   height: 92rpx;
   display: flex;
   align-items: center;
-  transition: border-color 0.25s;
-  background: #ffffff;
+  transition: border-color 0.25s, box-shadow 0.25s;
+  background: rgba(255, 255, 255, 0.06) !important;
 }
 
 .field-input-wrap:focus-within {
-  border-color: #2d3a4a;
+  border-color: #C87A3C;
+  box-shadow: 0 0 12rpx rgba(200, 122, 60, 0.25);
 }
 
 .field-input {
   flex: 1;
   height: 92rpx;
   font-size: 30rpx;
-  color: #1a1a2e;
-  background: transparent;
+  color: #ffffff !important;
+  background: transparent !important;
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  outline: none;
+}
+
+/* 强制覆盖浏览器原生 input 白色背景 */
+:deep(input),
+:deep(uni-input input) {
+  background: transparent !important;
+  color: #ffffff !important;
+  caret-color: #C87A3C;
 }
 
 .placeholder-style {
-  color: #b5b5c3;
+  color: rgba(240, 230, 216, 0.25);
   font-size: 28rpx;
 }
 
@@ -260,7 +274,7 @@ async function handleLogin() {
   width: 100%;
   height: 92rpx;
   line-height: 92rpx;
-  background: #1a2332;
+  background: linear-gradient(135deg, #8B4A1A 0%, #C87A3C 100%);
   color: #ffffff;
   font-size: 32rpx;
   font-weight: 600;
@@ -269,6 +283,7 @@ async function handleLogin() {
   margin-top: 12rpx;
   letter-spacing: 8rpx;
   transition: all 0.3s ease;
+  box-shadow: 0 4rpx 20rpx rgba(200, 122, 60, 0.3);
 }
 
 .login-btn::after {
@@ -277,7 +292,7 @@ async function handleLogin() {
 
 .login-btn[disabled] {
   opacity: 0.65;
-  background: #1a2332;
+  background: linear-gradient(135deg, #8B4A1A 0%, #C87A3C 100%);
 }
 
 /* 底部 */
@@ -288,7 +303,7 @@ async function handleLogin() {
 
 .footer-text {
   font-size: 22rpx;
-  color: #b5b5c3;
+  color: rgba(240, 230, 216, 0.25);
   letter-spacing: 1rpx;
 }
 
@@ -298,12 +313,11 @@ async function handleLogin() {
 @media screen and (min-width: 768px) {
   .login-page {
     flex-direction: row;
-    background: #eef0f5;
+    background: #1C1410;
     padding: 0;
     overflow: hidden;
   }
 
-  /* Web端隐藏移动端横幅和scroll容器 */
   .mobile-scroll {
     flex: none;
     height: 100vh;
@@ -315,7 +329,6 @@ async function handleLogin() {
     display: none;
   }
 
-  /* Web端显示侧边装饰图 */
   .side-banner {
     display: block;
     flex: 1;
@@ -336,7 +349,12 @@ async function handleLogin() {
     object-fit: cover;
   }
 
-  /* 卡片调整 - Web端恢复全高面板 */
+  .mobile-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   .login-card {
     width: 480px;
     min-width: 420px;
@@ -344,13 +362,18 @@ async function handleLogin() {
     min-height: 100vh;
     margin: 0;
     border-radius: 0;
-    box-shadow: -8px 0 40px rgba(0, 0, 0, 0.06);
-    padding: 0 0 40px 0;
+    border: none;
+    border-left: 1px solid rgba(200, 122, 60, 0.15);
+    box-shadow: -8px 0 40px rgba(0, 0, 0, 0.4);
+    padding: 0;
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
 
   .welcome-section {
-    padding: 80px 48px 0;
+    padding: 0 48px 0;
   }
 
   .welcome-title {
@@ -378,6 +401,12 @@ async function handleLogin() {
     height: 48px;
     border-radius: 10px;
     padding: 0 16px;
+    background: rgba(255, 255, 255, 0.06) !important;
+    border: 2px solid rgba(200, 122, 60, 0.25);
+  }
+
+  .field-input-wrap:focus-within {
+    border-color: #C87A3C;
   }
 
   .field-input {
@@ -395,7 +424,6 @@ async function handleLogin() {
   }
 
   .footer {
-    margin-top: auto;
     padding: 40px 48px 24px;
   }
 

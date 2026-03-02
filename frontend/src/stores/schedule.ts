@@ -19,15 +19,6 @@ export const useScheduleStore = defineStore('schedule', () => {
     return toRenderCourses(filtered);
   });
 
-  // 按星期分组的课程
-  const coursesByDay = computed(() => {
-    const result: Record<number, typeof displayCourses.value> = {};
-    for (let i = 1; i <= 7; i++) {
-      result[i] = displayCourses.value.filter(c => parseInt(c.day) === i);
-    }
-    return result;
-  });
-
   // 方法
   function setCourses(newCourses: Course[]) {
     courses.value = newCourses;
@@ -73,8 +64,10 @@ export const useScheduleStore = defineStore('schedule', () => {
   function clearData() {
     courses.value = [];
     userInfo.value = null;
+    semesterStart.value = '2026-02-23';
     uni.removeStorageSync('courses');
     uni.removeStorageSync('userInfo');
+    uni.removeStorageSync('semesterStart');
   }
 
   return {
@@ -85,7 +78,6 @@ export const useScheduleStore = defineStore('schedule', () => {
     loading,
     semesterStart,
     displayCourses,
-    coursesByDay,
     setCourses,
     setCurrentWeek,
     setUserInfo,
