@@ -1,3 +1,11 @@
+<!--
+ * @Author: limingjing6666 limingjing6868@gmail.com
+ * @Date: 2026-03-02 18:09:21
+ * @LastEditors: limingjing6666 limingjing6868@gmail.com
+ * @LastEditTime: 2026-03-02 18:10:52
+ * @FilePath: \SiasClassScheduleAssistant\README.md
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+-->
 # 🎓 西亚斯课表助手
 
 > 纯本地课表 App —— 无需后端服务器，直接在设备上抓取教务系统课表
@@ -71,10 +79,9 @@ frontend/
 
 ## ⚠️ 注意事项
 
-- 本应用不存储用户密码，仅在登录时使用
-- H5 模式通过 Vite 代理解决 CORS，生产部署需配置反向代理
-- App 原生模式直连教务系统，无需代理
-- 教务系统结构变化可能需要更新爬虫逻辑
+- 敏感配置请使用环境变量，不要硬编码
+- Python 路径需根据实际环境配置
+- 教务系统结构变化可能需要更新爬虫脚本
 
 ## 📄 License
 
