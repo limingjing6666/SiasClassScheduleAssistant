@@ -252,6 +252,13 @@ const DAY_WIDTH = 100 / 7;
 // 生命周期
 onMounted(() => {
   scheduleStore.loadFromCache();
+
+  // 保护：如果没有用户信息或课程数据，回到登录页
+  if (!scheduleStore.userInfo || scheduleStore.courses.length === 0) {
+    uni.reLaunch({
+      url: '/pages/login/login'
+    });
+  }
 });
 
 // 方法

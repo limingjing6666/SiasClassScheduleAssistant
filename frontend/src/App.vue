@@ -10,14 +10,15 @@ import { onLaunch, onShow, onHide } from '@dcloudio/uni-app';
 onLaunch(() => {
   console.log('App Launch');
 
-  // 检查登录状态
-  const token = uni.getStorageSync('userInfo');
-  if (!token) {
-    // 未登录，跳转到登录页
+  // 检查登录状态：已登录且有缓存课表 → 直接进入课表页，无需重新登录
+  const cachedUser = uni.getStorageSync('userInfo');
+  const cachedCourses = uni.getStorageSync('courses');
+  if (cachedUser && cachedCourses) {
     uni.reLaunch({
-      url: '/pages/login/login'
+      url: '/pages/schedule/schedule'
     });
   }
+  // 否则保持在默认登录页
 });
 
 onShow(() => {
