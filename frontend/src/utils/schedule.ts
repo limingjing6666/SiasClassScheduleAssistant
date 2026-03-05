@@ -150,8 +150,8 @@ export const NODE_TIMES: Record<number, { start: string; end: string }> = {
   6: { start: '13:55', end: '14:40' },
   7: { start: '15:00', end: '15:45' },
   8: { start: '15:55', end: '16:40' },
-  9: { start: '16:50', end: '17:35' },
-  10: { start: '17:55', end: '18:35' },
+  9: { start: '16:55', end: '17:40' },
+  10: { start: '17:50', end: '18:35' },
   11: { start: '19:10', end: '19:55' },
   12: { start: '20:00', end: '20:45' },
   13: { start: '20:50', end: '21:35' }
