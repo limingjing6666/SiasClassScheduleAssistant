@@ -14,6 +14,11 @@
             "style" : "light",
             "background" : "#1C1410"
         },
+        "compatible" : {
+            "runtimeVersion" : "4.87",
+            "compilerVersion" : "4.15",
+            "ignoreVersion" : true
+        },
         "splashscreen" : {
             "alwaysShowBeforeRender" : true,
             "waiting" : true,

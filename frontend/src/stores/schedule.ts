@@ -11,7 +11,8 @@ export const useScheduleStore = defineStore('schedule', () => {
   const userInfo = ref<UserInfo | null>(null);
   const loading = ref(false);
   // 学期开始日期（第一周周一），格式：YYYY-MM-DD
-  const semesterStart = ref('2026-02-23');
+  // ★ 立即从缓存读取，避免延迟加载导致用户设定的日期被默认值覆盖
+  const semesterStart = ref(uni.getStorageSync('semesterStart') || '2026-02-23');
 
   // 计算属性 - 根据当前周过滤课程
   const displayCourses = computed(() => {
@@ -61,6 +62,7 @@ export const useScheduleStore = defineStore('schedule', () => {
     }
   }
 
+  // 清除所有数据（含学期设置），用于退出登录
   function clearData() {
     courses.value = [];
     userInfo.value = null;
@@ -68,6 +70,14 @@ export const useScheduleStore = defineStore('schedule', () => {
     uni.removeStorageSync('courses');
     uni.removeStorageSync('userInfo');
     uni.removeStorageSync('semesterStart');
+  }
+
+  // 仅清除账号相关数据，保留用户设定的学期开始日期（切换账号/重新登录时用）
+  function clearUserData() {
+    courses.value = [];
+    userInfo.value = null;
+    uni.removeStorageSync('courses');
+    uni.removeStorageSync('userInfo');
   }
 
   return {
@@ -83,6 +93,7 @@ export const useScheduleStore = defineStore('schedule', () => {
     setUserInfo,
     setSemesterStart,
     loadFromCache,
-    clearData
+    clearData,
+    clearUserData
   };
 });
