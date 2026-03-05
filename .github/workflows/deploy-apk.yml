@@ -1,0 +1,107 @@
+name: Deploy APK to Server
+
+# 触发条件：
+# 1. 创建 Release 时自动触发
+# 2. 手动触发（workflow_dispatch）
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要部署的 Release tag（如 v1.0.1）'
+        required: true
+        type: string
+
+# ────────────────────────────────────────────────
+# 需要配置的 GitHub Secrets（在仓库 Settings → Secrets）:
+#
+#   DEPLOY_HOST     服务器IP（如 165.22.240.99）
+#   DEPLOY_USER     SSH用户名（如 root）
+#   DEPLOY_KEY      SSH私钥（id_rsa 的完整内容）
+#   DEPLOY_PATH     APK部署路径（如 /var/www/html/app）
+#   APK_FILENAME    APK文件名（如 西亚斯课表助手.apk）
+# ────────────────────────────────────────────────
+
+jobs:
+  deploy:
+    name: 部署 APK 到服务器
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 确定 Release Tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "TAG=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "TAG=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 从 Release 下载 APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "📦 正在从 Release ${{ steps.tag.outputs.TAG }} 下载 APK..."
+          gh release download "${{ steps.tag.outputs.TAG }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "*.apk" \
+            --dir ./apk-download
+          
+          # 列出下载到的文件
+          echo "下载的文件:"
+          ls -la ./apk-download/
+          
+          # 找到 APK 文件
+          APK_FILE=$(find ./apk-download -name "*.apk" | head -1)
+          if [ -z "$APK_FILE" ]; then
+            echo "❌ 未找到 APK 文件！请确认 Release 中包含 .apk 文件"
+            exit 1
+          fi
+          echo "APK_FILE=$APK_FILE" >> $GITHUB_ENV
+          echo "✅ 找到 APK: $APK_FILE"
+
+      - name: 部署到服务器
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          APK_FILENAME: ${{ secrets.APK_FILENAME }}
+        run: |
+          # 设置 SSH 密钥
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          
+          # 设置默认值
+          DEPLOY_PATH="${DEPLOY_PATH:-/var/www/html/app}"
+          APK_FILENAME="${APK_FILENAME:-西亚斯课表助手.apk}"
+          
+          echo "🚀 正在上传到 ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/${APK_FILENAME}..."
+          
+          # 确保远程目录存在
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "mkdir -p '${DEPLOY_PATH}'"
+          
+          # 上传 APK（先传到临时文件，再原子性移动，避免下载到半成品）
+          REMOTE_TMP="${DEPLOY_PATH}/.apk-uploading.tmp"
+          REMOTE_DEST="${DEPLOY_PATH}/${APK_FILENAME}"
+          
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            "$APK_FILE" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_TMP}"
+          
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "mv '${REMOTE_TMP}' '${REMOTE_DEST}' && echo '✅ 部署成功: ${REMOTE_DEST}'"
+
+      - name: 部署完成通知
+        if: success()
+        run: |
+          echo "============================================"
+          echo "✅ APK 已成功部署到服务器！"
+          echo "   版本: ${{ steps.tag.outputs.TAG }}"
+          echo "============================================"
