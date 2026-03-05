@@ -153,7 +153,18 @@ if (Test-Path $manifestPath) {
 }
 
 # ═══════════════════════════════════════════════
-# 5. 创建 Release 并上传 APK
+# 5. 重命名 APK（HBuilderX 生成的文件名含特殊字符，会导致上传失败）
+# ═══════════════════════════════════════════════
+$CleanApkName = "西亚斯课表助手_v${Version}.apk"
+$CleanApkPath = Join-Path (Split-Path $ApkPath) $CleanApkName
+if ($ApkPath -ne $CleanApkPath) {
+    Copy-Item -Path $ApkPath -Destination $CleanApkPath -Force
+    Write-Host "📎 已复制 APK 为: $CleanApkName" -ForegroundColor Green
+    $ApkPath = $CleanApkPath
+}
+
+# ═══════════════════════════════════════════════
+# 6. 创建 Release 并上传 APK
 # ═══════════════════════════════════════════════
 if (-not $Notes) {
     $Notes = "西亚斯课表助手 $Tag`n`n发布于 $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
@@ -171,11 +182,11 @@ if ($LASTEXITCODE -eq 0) {
         exit 0
     }
     # 删除旧的 APK 资源然后重新上传
-    gh release upload $Tag $ApkPath --clobber
+    gh release upload $Tag "$ApkPath" --clobber
     Write-Host "✅ 已覆盖上传 APK 到 Release $Tag" -ForegroundColor Green
 } else {
     # 创建新 Release
-    gh release create $Tag $ApkPath `
+    gh release create $Tag "$ApkPath" `
         --title "西亚斯课表助手 $Tag" `
         --notes $Notes
 
