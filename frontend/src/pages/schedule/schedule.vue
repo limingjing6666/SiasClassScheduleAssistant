@@ -39,10 +39,8 @@
           <view class="action-tag" @click="goToCurrentWeek">
             <text class="action-tag-text">本周</text>
           </view>
-          <view class="action-tag calendar-tag" @click="openCalendar">
-            <text class="action-tag-text">📅 设置学期开始日期</text>
-          </view>
-          <view class="action-tag" @click="handleLogout">
+          
+          <view class="action-tag action-tag-right" @click="handleLogout">
             <text class="action-tag-text">退出</text>
           </view>
         </view>
@@ -584,6 +582,10 @@ function handleLogout() {
   background: rgba(200, 122, 60, 0.08);
   border: 1rpx solid rgba(200, 122, 60, 0.3);
   border-radius: 24rpx;
+}
+
+.action-tag-right {
+  margin-left: auto;
 }
 
 .calendar-tag {

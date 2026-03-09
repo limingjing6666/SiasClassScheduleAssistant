@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { Course, UserInfo } from '@/types';
 import { filterByWeek, toRenderCourses } from '@/utils/schedule';
+import { SCHEDULE_CONFIG } from '@/config/schedule';
 
 export const useScheduleStore = defineStore('schedule', () => {
   // 状态
@@ -12,7 +13,7 @@ export const useScheduleStore = defineStore('schedule', () => {
   const loading = ref(false);
   // 学期开始日期（第一周周一），格式：YYYY-MM-DD
   // ★ 立即从缓存读取，避免延迟加载导致用户设定的日期被默认值覆盖
-  const semesterStart = ref(uni.getStorageSync('semesterStart') || '2026-02-23');
+  const semesterStart = ref(uni.getStorageSync('semesterStart') || SCHEDULE_CONFIG.DEFAULT_SEMESTER_START);
 
   // 计算属性 - 根据当前周过滤课程
   const displayCourses = computed(() => {
@@ -43,6 +44,21 @@ export const useScheduleStore = defineStore('schedule', () => {
     uni.setStorageSync('semesterStart', date);
   }
 
+  function initCurrentWeek() {
+    const start = new Date(semesterStart.value);
+    const today = new Date();
+    // 计算今天距离开学的天数
+    const diffTime = today.getTime() - start.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    // 计算当前是第几周
+    let week = Math.floor(diffDays / 7) + 1;
+
+    if (week < 1) week = 1;
+    if (week > totalWeeks.value) week = totalWeeks.value;
+
+    currentWeek.value = week;
+  }
+
   function loadFromCache() {
     try {
       const cachedCourses = uni.getStorageSync('courses');
@@ -57,6 +73,8 @@ export const useScheduleStore = defineStore('schedule', () => {
       if (cachedSemesterStart) {
         semesterStart.value = cachedSemesterStart;
       }
+      // 加载完缓存（尤其是开学日期）后，自动初始化当前周数
+      initCurrentWeek();
     } catch (e) {
       console.error('加载缓存失败', e);
     }
@@ -66,7 +84,7 @@ export const useScheduleStore = defineStore('schedule', () => {
   function clearData() {
     courses.value = [];
     userInfo.value = null;
-    semesterStart.value = '2026-02-23';
+    semesterStart.value = SCHEDULE_CONFIG.DEFAULT_SEMESTER_START;
     uni.removeStorageSync('courses');
     uni.removeStorageSync('userInfo');
     uni.removeStorageSync('semesterStart');
