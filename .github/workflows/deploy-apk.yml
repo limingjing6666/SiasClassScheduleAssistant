@@ -69,7 +69,7 @@ jobs:
           V_MAJOR=$(echo $VERSION_NAME | cut -d. -f1)
           V_MINOR=$(echo $VERSION_NAME | cut -d. -f2)
           V_PATCH=$(echo $VERSION_NAME | cut -d. -f3)
-          VERSION_CODE=$((V_MAJOR * 100 + V_MINOR * 10 + V_PATCH))
+          VERSION_CODE=$((V_MAJOR * 10000 + V_MINOR * 100 + V_PATCH))
           
           # 抓取当前 Release 的 Release Notes
           RELEASE_NOTES=$(gh release view "${{ steps.tag.outputs.TAG }}" --json body -q '.body')

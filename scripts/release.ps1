@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     一键发布 APK：创建 GitHub Release 并上传 APK，自动触发服务器部署。
 
@@ -142,12 +142,13 @@ if (Test-Path $manifestPath) {
 
     $oldVersion = $manifest.versionName
     if ($oldVersion -ne $Version) {
-        # 计算 versionCode（去掉点号，如 1.0.2 → 102）
+        # 计算 versionCode（采用万位公式，如 1.0.6 → 10006）
         $versionParts = $Version -split "\."
-        $versionCode = [int]$versionParts[0] * 100 + [int]$versionParts[1] * 10 + [int]$versionParts[2]
+        $versionCode = [int]$versionParts[0] * 10000 + [int]$versionParts[1] * 100 + [int]$versionParts[2]
 
         $manifestContent = $manifestContent -replace '"versionName"\s*:\s*"[^"]*"', "`"versionName`" : `"$Version`""
-        $manifestContent = $manifestContent -replace '"versionCode"\s*:\s*"[^"]*"', "`"versionCode`" : `"$versionCode`""
+        # 兼容数字和字符串格式的 versionCode
+        $manifestContent = $manifestContent -replace '"versionCode"\s*:\s*("?)(\d+)\1', "`"versionCode`" : $versionCode"
         Set-Content -Path $manifestPath -Value $manifestContent -Encoding UTF8
 
         Write-Host "[更新] 已更新 manifest.json: $oldVersion -> $Version (code: $versionCode)" -ForegroundColor Green

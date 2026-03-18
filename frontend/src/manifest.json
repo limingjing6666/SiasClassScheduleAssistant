@@ -1,14 +1,17 @@
-﻿{
+{
     "name" : "西亚斯课表",
     "appid" : "__UNI__4A0FB40",
     "description" : "西亚斯课表助手 - 便捷查看课表",
-    "versionName" : "1.0.5",
-    "versionCode" : 110,
+    "versionName" : "1.0.6",
+    "versionCode" : 10006,
     "transformPx" : false,
     "app-plus" : {
         "usingComponents" : true,
         "nvueCompiler" : "uni-app",
         "compilerVersion" : 3,
+        "modules" : {
+            "push" : {}
+        },
         "statusbar" : {
             "immersive" : true,
             "style" : "light",
@@ -80,5 +83,3 @@
     "h5" : {},
     "vueVersion" : "3"
 }
-
-
