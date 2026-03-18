@@ -1,8 +1,8 @@
-{
+﻿{
     "name" : "西亚斯课表",
     "appid" : "__UNI__4A0FB40",
     "description" : "西亚斯课表助手 - 便捷查看课表",
-    "versionName" : "1.1.0",
+    "versionName" : "1.0.4",
     "versionCode" : 110,
     "transformPx" : false,
     "app-plus" : {
@@ -80,3 +80,4 @@
     "h5" : {},
     "vueVersion" : "3"
 }
+
