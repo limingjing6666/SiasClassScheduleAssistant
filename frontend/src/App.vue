@@ -6,9 +6,15 @@
 
 <script setup lang="ts">
 import { onLaunch, onShow, onHide } from '@dcloudio/uni-app';
+import { checkUpdate } from '@/utils/update';
 
 onLaunch(() => {
   console.log('App Launch');
+
+  // 后台静默检查版本更新
+  setTimeout(() => {
+    checkUpdate();
+  }, 3000);
 
   // 检查登录状态：已登录且有缓存课表 → 直接进入课表页，无需重新登录
   const cachedUser = uni.getStorageSync('userInfo');

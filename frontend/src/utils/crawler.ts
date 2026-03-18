@@ -137,7 +137,8 @@ function uniRequest(
     })
     .catch((err) => {
       clearTimeout(timer);
-      throw new Error(err?.message || '网络请求失败');
+      console.error('[H5 request] fetch failed:', err);
+      throw new Error('NETWORK_ERROR');
     });
 }
 // #endif
@@ -226,7 +227,7 @@ function uniRequest(
       },
       fail: (err) => {
         console.error(`[App request] FAIL ${method} ${url}:`, err.errMsg);
-        reject(new Error(err.errMsg || '网络请求失败'));
+        reject(new Error('NETWORK_ERROR'));
       }
     });
   });
@@ -344,8 +345,10 @@ export class SiasCrawler {
           timeout: 5000
         });
         console.log('[login] Pre-logout completed');
-      } catch {
-        // 忽略登出失败（可能本来就没有 session）
+      } catch (e: any) {
+        // 如果是网络连接超时/不可达，不仅是登出会失败，后续也必败。应该尽早抛出并交由外层处理为 NETWORK_ERROR
+        if (e?.message === 'NETWORK_ERROR') throw e;
+        // 忽略其他报错（可能本来就没有 session 等软错误）
         console.log('[login] Pre-logout failed (ignored)');
       }
       await sleep(500);
@@ -403,7 +406,8 @@ export class SiasCrawler {
       }
       console.log('[login] ✓ Login success');
       return true;
-    } catch (e: unknown) {
+    } catch (e: any) {
+      if (e?.message === 'NETWORK_ERROR') throw e;
       console.error('[login] Exception:', e instanceof Error ? e.message : e);
       return false;
     }
@@ -523,7 +527,8 @@ export class SiasCrawler {
 
       console.log('[autoDetect] Final → userId:', this.userId, 'semesterId:', this.currentSemesterId);
       return this.userId !== null;
-    } catch (e: unknown) {
+    } catch (e: any) {
+      if (e?.message === 'NETWORK_ERROR') throw e;
       console.error('[autoDetect] Exception:', e instanceof Error ? e.message : e);
       return false;
     }
@@ -735,6 +740,8 @@ export function translateError(error: string): string {
       return '未找到学期信息，请稍后重试';
     case 'RATE_LIMITED':
       return '教务系统请求过于频繁，请稍后再试';
+    case 'NETWORK_ERROR':
+      return '教务系统连接失败。请确认当前是否在校园网内，或教务系统已暂时关闭公网访问（建议使用校园网或 VPN）。';
     default:
       return `未知错误: ${error}`;
   }

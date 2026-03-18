@@ -35,7 +35,14 @@
         </view>
       </view>
       <view class="week-bar">
+        <view class="sync-info" v-if="userInfo?.lastSyncAt">
+          <text class="sync-text">上次同步: {{ formatSyncTime(userInfo.lastSyncAt) }}</text>
+        </view>
         <view class="week-actions">
+          <view class="action-tag" @click="toggleReminders" :style="{ background: enableReminders ? 'rgba(200, 122, 60, 0.22)' : '' }">
+            <text class="action-tag-text">{{ enableReminders ? '🔕 关闭提醒' : '🔔 开启提醒' }}</text>
+          </view>
+          
           <view class="action-tag" @click="goToCurrentWeek">
             <text class="action-tag-text">本周</text>
           </view>
@@ -236,6 +243,19 @@ const currentWeek = computed(() => scheduleStore.currentWeek);
 const totalWeeks = computed(() => scheduleStore.totalWeeks);
 const displayCourses = computed(() => scheduleStore.displayCourses);
 const semesterStart = computed(() => scheduleStore.semesterStart);
+const userInfo = computed(() => scheduleStore.userInfo);
+const enableReminders = computed(() => scheduleStore.enableReminders);
+
+function formatSyncTime(isoString: string): string {
+  if (!isoString) return '未知';
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return '未知';
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  const h = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${m}/${day} ${h}:${min}`;
+}
 
 // 周次选项
 const weekOptions = computed(() => {
@@ -260,6 +280,22 @@ onMounted(() => {
 });
 
 // 方法
+// 开启/关闭课前提醒
+function toggleReminders() {
+  // #ifndef APP-PLUS
+  uni.showToast({ title: '体验版/H5 无法使用该原生提醒', icon: 'none' });
+  return;
+  // #endif
+
+  const newState = !enableReminders.value;
+  scheduleStore.setReminders(newState);
+  if (newState) {
+    uni.showToast({ title: '已开启未来 7 天的课前提醒', icon: 'success' });
+  } else {
+    uni.showToast({ title: '已关闭提醒', icon: 'none' });
+  }
+}
+
 function prevWeek() {
   if (currentWeek.value > 1) {
     scheduleStore.setCurrentWeek(currentWeek.value - 1);
@@ -565,6 +601,19 @@ function handleLogout() {
 /* 操作按钮栏 */
 .week-bar {
   padding: 8rpx 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sync-info {
+  display: flex;
+  align-items: center;
+}
+
+.sync-text {
+  font-size: 22rpx;
+  color: rgba(240, 230, 216, 0.4);
 }
 
 .week-actions {

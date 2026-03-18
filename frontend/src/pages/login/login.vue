@@ -55,6 +55,12 @@
           >
             {{ loading ? '同步中...' : '登 录' }}
           </button>
+
+          <!-- 错误提示横幅 -->
+          <view v-if="errorMessage" class="error-banner">
+            <text class="error-icon">⚠️</text>
+            <text class="error-text">{{ errorMessage }}</text>
+          </view>
         </view>
 
         <!-- 底部说明 -->
@@ -83,10 +89,13 @@ import { useScheduleStore } from '@/stores/schedule';
 const username = ref('');
 const password = ref('');
 const loading = ref(false);
+const errorMessage = ref('');
 
 const scheduleStore = useScheduleStore();
 
 async function handleLogin() {
+  errorMessage.value = '';
+
   // 验证输入
   if (!username.value.trim()) {
     uni.showToast({ title: '请输入学号', icon: 'none' });
@@ -128,11 +137,8 @@ async function handleLogin() {
     }, 1000);
 
   } catch (error: any) {
-    uni.showToast({
-      title: error.message || '同步失败',
-      icon: 'none',
-      duration: 3000
-    });
+    // 将普通 toast 提示改为持久化的页面级提示
+    errorMessage.value = error.message || '同步失败';
   } finally {
     loading.value = false;
   }
@@ -298,6 +304,30 @@ async function handleLogin() {
   background: linear-gradient(135deg, #8B4A1A 0%, #C87A3C 100%);
 }
 
+/* 错误提示横幅 */
+.error-banner {
+  margin-top: 24rpx;
+  padding: 20rpx 24rpx;
+  background: rgba(220, 53, 69, 0.1);
+  border: 1rpx solid rgba(220, 53, 69, 0.3);
+  border-radius: 12rpx;
+  display: flex;
+  align-items: flex-start;
+}
+
+.error-icon {
+  font-size: 28rpx;
+  margin-right: 12rpx;
+  line-height: 1.4;
+}
+
+.error-text {
+  font-size: 24rpx;
+  color: #ff8c8c;
+  line-height: 1.5;
+  flex: 1;
+}
+
 /* 底部 */
 .footer {
   padding: 40rpx 48rpx 36rpx;
@@ -424,6 +454,20 @@ async function handleLogin() {
     font-size: 16px;
     margin-top: 8px;
     letter-spacing: 6px;
+  }
+
+  .error-banner {
+    margin-top: 16px;
+    padding: 12px 16px;
+    border-radius: 8px;
+  }
+
+  .error-icon {
+    font-size: 16px;
+  }
+
+  .error-text {
+    font-size: 13px;
   }
 
   .footer {

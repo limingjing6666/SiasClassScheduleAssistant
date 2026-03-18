@@ -60,6 +60,28 @@ jobs:
           fi
           echo "APK_FILE=$APK_FILE" >> $GITHUB_ENV
           echo "✅ 找到 APK: $APK_FILE"
+          
+          # 生成 update.json 并存入当前目录
+          VERSION_NAME=$(echo ${{ steps.tag.outputs.TAG }} | sed 's/v//')
+          V_MAJOR=$(echo $VERSION_NAME | cut -d. -f1)
+          V_MINOR=$(echo $VERSION_NAME | cut -d. -f2)
+          V_PATCH=$(echo $VERSION_NAME | cut -d. -f3)
+          VERSION_CODE=$((V_MAJOR * 100 + V_MINOR * 10 + V_PATCH))
+          
+          # 获取 Release Notes 并转义为 JSON 安全字符串
+          RELEASE_NOTES=$(gh release view "${{ steps.tag.outputs.TAG }}" --json body -q '.body')
+          
+          # 构建 update.json
+          cat <<EOF > ./apk-download/update.json
+          {
+            "versionCode": ${VERSION_CODE},
+            "versionName": "${VERSION_NAME}",
+            "updateLog": $(jq -n --arg str "$RELEASE_NOTES" '$str'),
+            "url": "http://limingjing.codes/app/%E8%A5%BF%E4%BA%9A%E6%96%AF%E8%AF%BE%E8%A1%A8%E5%8A%A9%E6%89%8B.apk"
+          }
+          EOF
+          echo "✅ 已生成 update.json:"
+          cat ./apk-download/update.json
 
       - name: 部署到服务器
         env:
@@ -93,6 +115,11 @@ jobs:
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             "$APK_FILE" \
             "${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_TMP}"
+            
+          # 上传 update.json
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            "./apk-download/update.json" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/update.json"
           
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
