@@ -14,8 +14,8 @@
 
         <!-- 欢迎语 -->
         <view class="welcome-section" v-if="!loading">
-          <text class="welcome-title">欢迎回来 👋</text>
-          <text class="welcome-desc">新的一天，从课表开始。</text>
+          <text class="welcome-title">欢迎回来</text>
+          <text class="welcome-desc">苦逼的一天，从课表开始。</text>
           <text class="welcome-desc">登录以同步你的课程安排。</text>
         </view>
 
