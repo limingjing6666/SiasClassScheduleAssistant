@@ -1,5 +1,5 @@
 <template>
-  <view class="app">
+  <view class="app" :class="['theme-' + scheduleStore.theme]">
     <slot />
   </view>
 </template>
@@ -7,16 +7,22 @@
 <script setup lang="ts">
 import { onLaunch, onShow, onHide } from '@dcloudio/uni-app';
 import { checkUpdate } from '@/utils/update';
+import { useScheduleStore } from '@/stores/schedule';
+
+const scheduleStore = useScheduleStore();
 
 onLaunch(() => {
   console.log('App Launch');
+  
+  // 加载缓存
+  scheduleStore.loadFromCache();
 
   // 后台静默检查版本更新
   setTimeout(() => {
     checkUpdate();
   }, 3000);
 
-  // 检查登录状态：已登录且有缓存课表 → 直接进入课表页，无需重新登录
+  // 检查登录状态
   const cachedUser = uni.getStorageSync('userInfo');
   const cachedCourses = uni.getStorageSync('courses');
   if (cachedUser && cachedCourses) {
@@ -24,7 +30,6 @@ onLaunch(() => {
       url: '/pages/schedule/schedule'
     });
   }
-  // 否则保持在默认登录页
 });
 
 onShow(() => {
@@ -37,71 +42,82 @@ onHide(() => {
 </script>
 
 <style>
-/* 全局样式 —— 暖色深色主题 */
-page {
-  background-color: #1C1410;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  color: #F0E6D8;
-  color-scheme: dark;
-}
-
-/* 强制浏览器原生控件（日历、下拉等）使用深色模式 */
+/* ========================================
+   1. 核心主题变量定义
+   ======================================== */
 :root {
-  color-scheme: dark;
-  accent-color: #C87A3C;
+  /* 默认深色 (Classic Dark) */
+  --bg-primary: #1C1410;
+  --bg-secondary: #2A1E16;
+  --bg-header: #1C1410;
+  --text-primary: #F0E6D8;
+  --text-secondary: rgba(240, 230, 216, 0.4);
+  --accent: #C87A3C;
+  --border: rgba(200, 122, 60, 0.15);
+  --grid-line: rgba(200, 122, 60, 0.08);
+  --card-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.3);
 }
 
-/* 覆盖浏览器 input 自动填充的白色背景 */
-input:-webkit-autofill,
-input:-webkit-autofill:hover,
-input:-webkit-autofill:focus {
-  -webkit-text-fill-color: #ffffff !important;
-  -webkit-box-shadow: 0 0 0 1000px #2A1E16 inset !important;
-  box-shadow: 0 0 0 1000px #2A1E16 inset !important;
-  transition: background-color 5000s ease-in-out 0s;
+.theme-morandi {
+  --bg-primary: #f4f4f2;
+  --bg-secondary: #e8e8e8;
+  --bg-header: #e8e8e8;
+  --text-primary: #5f5f5f;
+  --text-secondary: rgba(95, 95, 95, 0.6);
+  --accent: #8e9775;
+  --border: rgba(142, 151, 117, 0.3);
+  --grid-line: rgba(0, 0, 0, 0.05);
+  --card-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.05);
 }
 
-/* 强制所有 input 元素使用透明背景 */
-input, uni-input input {
-  background: transparent !important;
-  color: #ffffff !important;
-  color-scheme: dark;
+.theme-light {
+  --bg-primary: #FBF8F1;
+  --bg-secondary: #F7F2E7;
+  --bg-header: #FBF8F1;
+  --text-primary: #4A4A4A;
+  --text-secondary: rgba(74, 74, 74, 0.5);
+  --accent: #7A9D8C;
+  --border: rgba(122, 157, 140, 0.15);
+  --grid-line: rgba(0, 0, 0, 0.04);
+  --card-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
 }
 
-/* 日期选择器图标颜色 */
-::-webkit-calendar-picker-indicator {
-  filter: invert(0.7) sepia(1) saturate(3) hue-rotate(350deg);
-}
-
-/* uni-app H5 picker 容器样式覆盖 */
-.uni-picker-container .uni-picker-header {
-  background: #2A1E16 !important;
-  border-bottom: 1px solid rgba(200, 122, 60, 0.2) !important;
-}
-
-.uni-picker-container .uni-picker-action {
-  color: #C87A3C !important;
-}
-
-.uni-picker-container .uni-picker-content {
-  background: #1C1410 !important;
-  color: #F0E6D8 !important;
-}
-
-.uni-picker-container .uni-picker-text {
-  color: #F0E6D8 !important;
-}
-
-.uni-picker-container {
-  background: rgba(0, 0, 0, 0.75) !important;
-}
-
-.uni-picker-container .uni-picker-bottom {
-  background: #2A1E16 !important;
+/* ========================================
+   2. 全局基础样式
+   ======================================== */
+page {
+  background-color: var(--bg-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .app {
   min-height: 100vh;
-  background-color: #1C1410;
+  background-color: var(--bg-primary);
+}
+
+/* 骨架屏动画 */
+@keyframes skeleton-pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 0.3; }
+  100% { opacity: 0.6; }
+}
+
+.skeleton-item {
+  background: var(--bg-secondary);
+  border-radius: 8rpx;
+  animation: skeleton-pulse 1.5s infinite ease-in-out;
+}
+
+/* 覆盖原有样式... */
+input:-webkit-autofill {
+  -webkit-text-fill-color: var(--text-primary) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-secondary) inset !important;
+}
+
+input {
+  background: transparent !important;
+  color: var(--text-primary) !important;
 }
 </style>

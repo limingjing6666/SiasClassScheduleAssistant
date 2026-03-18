@@ -13,14 +13,14 @@
         </view>
 
         <!-- 欢迎语 -->
-        <view class="welcome-section">
+        <view class="welcome-section" v-if="!loading">
           <text class="welcome-title">欢迎回来 👋</text>
           <text class="welcome-desc">新的一天，从课表开始。</text>
           <text class="welcome-desc">登录以同步你的课程安排。</text>
         </view>
 
         <!-- 登录表单 -->
-        <view class="form-section">
+        <view class="form-section" v-if="!loading">
           <view class="field">
             <text class="field-label">学号</text>
             <view class="field-input-wrap">
@@ -49,11 +49,9 @@
 
           <button
             class="login-btn"
-            :loading="loading"
-            :disabled="loading"
             @click="handleLogin"
           >
-            {{ loading ? '同步中...' : '登 录' }}
+            登 录
           </button>
 
           <!-- 错误提示横幅 -->
@@ -61,6 +59,22 @@
             <text class="error-icon">⚠️</text>
             <text class="error-text">{{ errorMessage }}</text>
           </view>
+        </view>
+
+        <!-- 骨架屏同步状态 -->
+        <view class="sync-skeleton" v-else>
+          <view class="sync-header">
+            <view class="skeleton-item title-sk"></view>
+            <view class="skeleton-item desc-sk"></view>
+          </view>
+          <view class="sync-grid-sk">
+            <view v-for="i in 4" :key="i" class="sk-col">
+              <view v-for="j in 4" :key="j" class="skeleton-item sk-block" 
+                :style="{ height: (j % 3 === 0 ? '120rpx' : '80rpx'), opacity: 1 - (i * 0.1) }">
+              </view>
+            </view>
+          </view>
+          <text class="sync-tip">正在同步教务系统数据...</text>
         </view>
 
         <!-- 底部说明 -->
@@ -151,11 +165,12 @@ async function handleLogin() {
    ============================================ */
 .login-page {
   height: 100vh;
-  background: #1C1410;
+  background: var(--bg-primary);
   display: flex;
   flex-direction: column;
   padding: 0;
   overflow: hidden;
+  transition: background 0.3s ease;
 }
 
 /* 移动端固定容器 */
@@ -171,13 +186,14 @@ async function handleLogin() {
   max-width: 700rpx;
   margin: 0 auto;
   margin-top: calc((100vh - 1100rpx) / 2);
-  background: #2A1E16;
-  border: 1rpx solid rgba(200, 122, 60, 0.2);
+  background: var(--bg-secondary);
+  border: 1rpx solid var(--border);
   border-radius: 36rpx;
-  box-shadow: 0 12rpx 60rpx rgba(0, 0, 0, 0.5);
+  box-shadow: var(--card-shadow);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: background 0.3s ease;
 }
 
 /* 移动端顶部装饰横幅 */
@@ -209,15 +225,64 @@ async function handleLogin() {
 .welcome-title {
   font-size: 48rpx;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
   margin-bottom: 12rpx;
   letter-spacing: 2rpx;
 }
 
 .welcome-desc {
   font-size: 26rpx;
-  color: rgba(240, 230, 216, 0.45);
+  color: var(--text-secondary);
   line-height: 1.6;
+}
+
+/* 同步骨架屏样式 */
+.sync-skeleton {
+  padding: 60rpx 48rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sync-header {
+  width: 100%;
+  margin-bottom: 40rpx;
+}
+
+.title-sk {
+  width: 200rpx;
+  height: 40rpx;
+  margin-bottom: 20rpx;
+}
+
+.desc-sk {
+  width: 100%;
+  height: 30rpx;
+}
+
+.sync-grid-sk {
+  display: flex;
+  width: 100%;
+  gap: 20rpx;
+  margin-bottom: 40rpx;
+}
+
+.sk-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.sk-block {
+  width: 100%;
+}
+
+.sync-tip {
+  font-size: 26rpx;
+  color: var(--accent);
+  font-weight: 600;
+  animation: skeleton-pulse 1.5s infinite;
 }
 
 /* 表单区域 */
@@ -233,19 +298,19 @@ async function handleLogin() {
   display: block;
   font-size: 28rpx;
   font-weight: 600;
-  color: rgba(240, 230, 216, 0.75);
+  color: var(--text-secondary);
   margin-bottom: 12rpx;
 }
 
 .field-input-wrap {
-  border: 2rpx solid rgba(200, 122, 60, 0.25);
+  border: 2rpx solid var(--border);
   border-radius: 16rpx;
   padding: 0 28rpx;
   height: 92rpx;
   display: flex;
   align-items: center;
   transition: border-color 0.25s, box-shadow 0.25s;
-  background: rgba(255, 255, 255, 0.06) !important;
+  background: var(--bg-primary);
 }
 
 .field-input-wrap:focus-within {
@@ -274,7 +339,7 @@ async function handleLogin() {
 }
 
 .placeholder-style {
-  color: rgba(240, 230, 216, 0.25);
+  color: var(--text-secondary);
   font-size: 28rpx;
 }
 
@@ -283,7 +348,7 @@ async function handleLogin() {
   width: 100%;
   height: 92rpx;
   line-height: 92rpx;
-  background: linear-gradient(135deg, #8B4A1A 0%, #C87A3C 100%);
+  background: var(--accent);
   color: #ffffff;
   font-size: 32rpx;
   font-weight: 600;
@@ -292,7 +357,6 @@ async function handleLogin() {
   margin-top: 12rpx;
   letter-spacing: 8rpx;
   transition: all 0.3s ease;
-  box-shadow: 0 4rpx 20rpx rgba(200, 122, 60, 0.3);
 }
 
 .login-btn::after {

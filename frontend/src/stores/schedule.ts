@@ -19,10 +19,13 @@ export const useScheduleStore = defineStore('schedule', () => {
   // 课前提醒开关设置
   const enableReminders = ref(uni.getStorageSync('enableReminders') === true);
 
+  // 主题设置: dark, morandi, light
+  const theme = ref(uni.getStorageSync('theme') || 'dark');
+
   // 计算属性 - 根据当前周过滤课程
   const displayCourses = computed(() => {
     const filtered = filterByWeek(courses.value, currentWeek.value);
-    return toRenderCourses(filtered);
+    return toRenderCourses(filtered, theme.value);
   });
 
   // 方法
@@ -64,6 +67,11 @@ export const useScheduleStore = defineStore('schedule', () => {
     }
   }
 
+  function setTheme(newTheme: string) {
+    theme.value = newTheme;
+    uni.setStorageSync('theme', newTheme);
+  }
+
   function initCurrentWeek() {
     const start = new Date(semesterStart.value);
     const today = new Date();
@@ -99,6 +107,11 @@ export const useScheduleStore = defineStore('schedule', () => {
       // 如果启用了本地推送体验，则在每次 App 重启时计算未来 7 天的推送并加载
       if (enableReminders.value && courses.value.length > 0) {
         setupClassReminders(courses.value, semesterStart.value);
+      }
+      
+      const cachedTheme = uni.getStorageSync('theme');
+      if (cachedTheme) {
+        theme.value = cachedTheme;
       }
     } catch (e) {
       console.error('加载缓存失败', e);
@@ -136,11 +149,13 @@ export const useScheduleStore = defineStore('schedule', () => {
     semesterStart,
     displayCourses,
     enableReminders,
+    theme,
     setCourses,
     setCurrentWeek,
     setUserInfo,
     setSemesterStart,
     setReminders,
+    setTheme,
     loadFromCache,
     clearData,
     clearUserData

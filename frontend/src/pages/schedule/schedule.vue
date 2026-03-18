@@ -13,6 +13,29 @@
             <text class="week-num">第{{ currentWeek }}周</text>
             <text class="week-num-arrow">▼</text>
           </view>
+          
+          <!-- 主题切换 -->
+          <view class="theme-switch" @click="showThemePopup = !showThemePopup">
+            <text class="theme-icon">🎨</text>
+          </view>
+
+          <!-- 主题选择弹窗 -->
+          <view v-if="showThemePopup" class="week-popup-mask" @click="showThemePopup = false"></view>
+          <view v-if="showThemePopup" class="theme-popup-dropdown" @click.stop>
+            <view class="week-popup-title">精美配色</view>
+            <view class="theme-option" :class="{ active: scheduleStore.theme === 'dark' }" @click="selectTheme('dark')">
+              <view class="theme-preview dark-p"></view>
+              <text>经典深色</text>
+            </view>
+            <view class="theme-option" :class="{ active: scheduleStore.theme === 'morandi' }" @click="selectTheme('morandi')">
+              <view class="theme-preview morandi-p"></view>
+              <text>莫兰迪灰</text>
+            </view>
+            <view class="theme-option" :class="{ active: scheduleStore.theme === 'light' }" @click="selectTheme('light')">
+              <view class="theme-preview light-p"></view>
+              <text>浅色纸质</text>
+            </view>
+          </view>
           <!-- 周数选择弹窗（独立遮罩层） -->
           <view v-if="showWeekPopup" class="week-popup-mask" @click="showWeekPopup = false"></view>
           <view v-if="showWeekPopup" class="week-popup-dropdown" @click.stop>
@@ -72,7 +95,21 @@
 
     <!-- 课表主体 -->
     <scroll-view class="schedule-body" scroll-y :show-scrollbar="false">
-      <view class="schedule-grid">
+      <!-- 骨架屏状态 -->
+      <view v-if="scheduleStore.loading" class="schedule-grid skeleton-grid">
+        <view class="time-column">
+          <view v-for="n in 12" :key="n" class="time-cell skeleton-item" style="margin: 4rpx; height: 92rpx;"></view>
+        </view>
+        <view class="courses-area" style="display: flex;">
+          <view v-for="day in 7" :key="day" class="grid-column" style="padding: 4rpx;">
+            <view v-for="node in 6" :key="node" class="skeleton-item" 
+              :style="{ height: (node % 3 === 0 ? '200rpx' : '100rpx'), marginBottom: '8rpx', width: '90%' }">
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view v-else class="schedule-grid">
         <!-- 节次列 -->
         <view class="time-column">
           <view
@@ -232,6 +269,13 @@ const showWeekPopup = ref(false);
 function selectWeek(week: number) {
   scheduleStore.setCurrentWeek(week);
   showWeekPopup.value = false;
+}
+
+const showThemePopup = ref(false);
+
+function selectTheme(themeStr: string) {
+  scheduleStore.setTheme(themeStr);
+  showThemePopup.value = false;
 }
 
 // 状态
@@ -468,7 +512,10 @@ function getCourseStyle(course: RenderCourse) {
     top: `${top}rpx`,
     width: `${DAY_WIDTH}%`,
     height: `${height}rpx`,
-    backgroundColor: course.color
+    backgroundColor: course.color,
+    // 添加阴影和边框增加质感
+    boxShadow: `0 2rpx 8rpx ${course.glowColor}40`,
+    border: `1rpx solid ${course.glowColor}60`
   };
 }
 
@@ -521,17 +568,17 @@ function handleLogout() {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #1C1410;
-  color: #F0E6D8;
+  background: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 /* ========== 顶部导航 ========== */
 .header {
-  background: #1C1410;
+  background: var(--bg-header);
   padding-bottom: 12rpx;
   position: relative;
   z-index: 10;
-  border-bottom: 1rpx solid rgba(200, 122, 60, 0.15);
+  border-bottom: 1rpx solid var(--border);
 }
 
 .status-bar {
@@ -594,8 +641,25 @@ function handleLogout() {
 
 .week-num-arrow {
   font-size: 20rpx;
-  color: #C87A3C;
+  color: var(--accent);
   margin-left: 8rpx;
+}
+
+/* 主题按钮 */
+.theme-switch {
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 28rpx;
+  background: var(--bg-secondary);
+  border: 1rpx solid var(--border);
+  margin-left: 12rpx;
+}
+
+.theme-icon {
+  font-size: 28rpx;
 }
 
 /* 操作按钮栏 */
@@ -665,21 +729,63 @@ function handleLogout() {
   transform: translateX(-50%);
   top: 64rpx;
   width: 240rpx;
-  background: #2A1E16;
-  border: 1rpx solid rgba(200, 122, 60, 0.3);
+  background: var(--bg-secondary);
+  border: 1rpx solid var(--border);
   border-radius: 16rpx;
-  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.6);
+  box-shadow: var(--card-shadow);
   z-index: 200;
   overflow: hidden;
 }
 
+.theme-popup-dropdown {
+  position: absolute;
+  right: 0;
+  top: 64rpx;
+  width: 320rpx;
+  background: var(--bg-secondary);
+  border: 1rpx solid var(--border);
+  border-radius: 20rpx;
+  box-shadow: var(--card-shadow);
+  z-index: 200;
+  padding: 12rpx;
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  padding: 20rpx;
+  border-radius: 12rpx;
+  margin-bottom: 8rpx;
+  font-size: 26rpx;
+  color: var(--text-primary);
+  opacity: 0.7;
+}
+
+.theme-option.active {
+  background: var(--bg-primary);
+  opacity: 1;
+  font-weight: 700;
+}
+
+.theme-preview {
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 50%;
+  margin-right: 20rpx;
+  border: 2rpx solid var(--border);
+}
+
+.dark-p { background: #1C1410; }
+.morandi-p { background: #8E9775; }
+.light-p { background: #7A9D8C; }
+
 .week-popup-title {
   font-size: 24rpx;
-  color: #C87A3C;
+  color: var(--accent);
   font-weight: 600;
   padding: 16rpx 0;
   text-align: center;
-  border-bottom: 1rpx solid rgba(200, 122, 60, 0.15);
+  border-bottom: 1rpx solid var(--border);
 }
 
 .week-popup-list {
@@ -721,8 +827,8 @@ function handleLogout() {
 /* ========== 课表头部 ========== */
 .schedule-header {
   display: flex;
-  background: #211912;
-  border-bottom: 1rpx solid rgba(200, 122, 60, 0.1);
+  background: var(--bg-secondary);
+  border-bottom: 1rpx solid var(--border);
   padding: 8rpx 0;
 }
 
@@ -801,8 +907,8 @@ function handleLogout() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-bottom: 1rpx solid rgba(240, 230, 216, 0.05);
-  background: #1A120E;
+  border-bottom: 1rpx solid var(--grid-line);
+  background: var(--bg-primary);
 }
 
 .node-num {
@@ -836,8 +942,8 @@ function handleLogout() {
 
 .grid-column {
   flex: 1;
-  border-left: 1rpx solid rgba(240, 230, 216, 0.04);
-  background: #1E1612;
+  border-left: 1rpx solid var(--grid-line);
+  background: var(--bg-primary);
 }
 
 .grid-column.today-column {
@@ -880,6 +986,12 @@ function handleLogout() {
   text-shadow: 0 1rpx 3rpx rgba(0, 0, 0, 0.4);
 }
 
+/* 浅色主题下增强文字对比度 */
+.theme-light .course-name,
+.theme-morandi .course-name {
+  text-shadow: 0 1rpx 4rpx rgba(0, 0, 0, 0.5);
+}
+
 .course-room {
   font-size: 16rpx;
   color: rgba(255, 255, 255, 0.75);
@@ -909,11 +1021,11 @@ function handleLogout() {
 .detail-card {
   width: 88%;
   max-width: 680rpx;
-  background: #2A1E16;
-  border: 1rpx solid rgba(200, 122, 60, 0.25);
+  background: var(--bg-secondary);
+  border: 1rpx solid var(--border);
   border-radius: 32rpx;
   overflow: hidden;
-  box-shadow: 0 20rpx 80rpx rgba(0, 0, 0, 0.7), 0 0 1rpx rgba(200, 122, 60, 0.3);
+  box-shadow: var(--card-shadow);
 }
 
 /* 顶部彩色横幅 */
@@ -929,7 +1041,7 @@ function handleLogout() {
   left: 0;
   right: 0;
   height: 40rpx;
-  background: linear-gradient(to bottom, transparent, #2A1E16);
+  background: linear-gradient(to bottom, transparent, var(--bg-secondary));
 }
 
 .detail-banner-title {
@@ -943,7 +1055,7 @@ function handleLogout() {
 
 .detail-banner-sub {
   font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-secondary);
   margin-top: 12rpx;
   display: block;
   font-weight: 500;
@@ -959,7 +1071,7 @@ function handleLogout() {
   display: flex;
   align-items: center;
   padding: 24rpx 0;
-  border-bottom: 1rpx solid rgba(240, 230, 216, 0.06);
+  border-bottom: 1rpx solid var(--border);
 }
 
 .detail-item:last-child {
@@ -1010,9 +1122,9 @@ function handleLogout() {
   width: 100%;
   height: 88rpx;
   line-height: 88rpx;
-  background: linear-gradient(135deg, rgba(200, 122, 60, 0.25), rgba(200, 122, 60, 0.15));
-  border: 1rpx solid rgba(200, 122, 60, 0.35);
-  color: #C87A3C;
+  background: var(--bg-primary);
+  border: 1rpx solid var(--border);
+  color: var(--accent);
   font-size: 30rpx;
   font-weight: 700;
   border-radius: 20rpx;
@@ -1041,11 +1153,11 @@ function handleLogout() {
 .cal-card {
   width: 88%;
   max-width: 640rpx;
-  background: #2A1E16;
-  border: 1rpx solid rgba(200, 122, 60, 0.25);
+  background: var(--bg-secondary);
+  border: 1rpx solid var(--border);
   border-radius: 28rpx;
   overflow: hidden;
-  box-shadow: 0 20rpx 80rpx rgba(0, 0, 0, 0.7);
+  box-shadow: var(--card-shadow);
   padding: 32rpx 28rpx;
 }
 
@@ -1076,7 +1188,7 @@ function handleLogout() {
 .cal-month-text {
   font-size: 34rpx;
   font-weight: 700;
-  color: #F0E6D8;
+  color: var(--text-primary);
   letter-spacing: 2rpx;
 }
 
@@ -1170,7 +1282,7 @@ function handleLogout() {
 
 .cal-footer-btn-text {
   font-size: 28rpx;
-  color: #C87A3C;
+  color: var(--accent);
   font-weight: 600;
 }
 

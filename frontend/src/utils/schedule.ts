@@ -1,40 +1,17 @@
 import type { Course, RenderCourse } from '@/types';
-
-/**
- * 预设颜色数组 - 暖色大地色系
- */
-const COLORS = [
-  '#8B4A1A', // 铁锈棕
-  '#C8B89A', // 驼色/卡其
-  '#7A2A1E', // 酒红/暗红
-  '#5A4A10', // 橄榄绿
-  '#A0522D', // 赭石/黄褐
-  '#8B6914', // 暗金
-  '#6B3A2A', // 深棕
-  '#4A6A2A', // 苔绿
-  '#9B5A3A', // 铜色
-  '#7A6A3A', // 暗卡其
-  '#5A3A2A', // 巧克力
-  '#8B7A4A', // 暗驼
-];
-
-/** 暖色边框色 —— 与 COLORS 一一对应（略浅的同系色） */
-export const GLOW_COLORS = [
-  '#B06A3A', '#D8CDB0', '#9A4A3E', '#7A6A30',
-  '#C07240', '#AB8934', '#8B5A4A', '#6A8A4A',
-  '#BB7A5A', '#9A8A5A', '#7A5A4A', '#AB9A6A',
-];
+import { THEME_PALETTES } from '@/config/themes';
 
 /**
  * 根据课程名称生成固定颜色
  * 相同课程名始终显示相同颜色
  */
-export function getCourseColor(courseName: string): string {
+export function getCourseColor(courseName: string, theme: string = 'dark'): string {
   let hash = 0;
   for (let i = 0; i < courseName.length; i++) {
     hash = courseName.charCodeAt(i) + ((hash << 5) - hash);
   }
-  return COLORS[Math.abs(hash) % COLORS.length];
+  const palette = THEME_PALETTES[theme] || THEME_PALETTES.dark;
+  return palette.colors[Math.abs(hash) % palette.colors.length];
 }
 
 /**
@@ -79,7 +56,11 @@ export function filterByWeek(courses: Course[], currentWeek: number): Course[] {
  * 将课程转换为渲染用数据
  * 确保同一天相邻的课程颜色不同
  */
-export function toRenderCourses(courses: Course[]): RenderCourse[] {
+export function toRenderCourses(courses: Course[], theme: string = 'dark'): RenderCourse[] {
+  const palette = THEME_PALETTES[theme] || THEME_PALETTES.dark;
+  const colors = palette.colors;
+  const glowColors = palette.glowColors;
+
   // 先按天和节次排序
   const sorted = [...courses].sort((a, b) => {
     if (a.day !== b.day) return parseInt(a.day) - parseInt(b.day);
@@ -93,7 +74,7 @@ export function toRenderCourses(courses: Course[]): RenderCourse[] {
 
   return sorted.map(course => {
     const { start, step } = parseNodes(course.nodes);
-    let color = getCourseColor(course.name);
+    let color = getCourseColor(course.name, theme);
     
     // 如果和同一天上一节课颜色相同，换一个颜色
     const lastColor = lastColorByDay[course.day];
@@ -103,10 +84,10 @@ export function toRenderCourses(courses: Course[]): RenderCourse[] {
       for (let i = 0; i < course.name.length; i++) {
         hash = course.name.charCodeAt(i) + ((hash << 5) - hash);
       }
-      const baseIndex = Math.abs(hash) % COLORS.length;
+      const baseIndex = Math.abs(hash) % colors.length;
       // 尝试下一个颜色
-      for (let i = 1; i < COLORS.length; i++) {
-        const newColor = COLORS[(baseIndex + i) % COLORS.length];
+      for (let i = 1; i < colors.length; i++) {
+        const newColor = colors[(baseIndex + i) % colors.length];
         if (newColor !== lastColor) {
           color = newColor;
           break;
@@ -117,8 +98,8 @@ export function toRenderCourses(courses: Course[]): RenderCourse[] {
     lastColorByDay[course.day] = color;
 
     // 获取对应的发光色
-    const colorIndex = COLORS.indexOf(color);
-    const glowColor = colorIndex >= 0 ? GLOW_COLORS[colorIndex] : GLOW_COLORS[0];
+    const colorIndex = colors.indexOf(color);
+    const glowColor = colorIndex >= 0 ? glowColors[colorIndex] : glowColors[0];
 
     return {
       ...course,
