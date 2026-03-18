@@ -100,21 +100,24 @@ if (-not $ApkPath) {
 # 3. Determine Version
 # -----------------------------------------------------------------------------
 if (-not $Version) {
-    $latestTag = gh release list --limit 1 --json tagName --jq ".[0].tagName" 2>$null
-    if ($latestTag -match "v?(\d+)\.(\d+)\.(\d+)") {
-        $major = [int]$Matches[1]
-        $minor = [int]$Matches[2]
-        $patch = [int]$Matches[3] + 1
-        $Version = "$major.$minor.$patch"
-        Write-Host "[VERSION] Previous: $latestTag -> New: v$Version" -ForegroundColor Cyan
+    # 优先从 manifest.json 读取当前打包版本
+    $manifestPath = Join-Path $PSScriptRoot "..\frontend\src\manifest.json"
+    if (Test-Path $manifestPath) {
+        $manifest = Get-Content $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $Version = $manifest.versionName
+        Write-Host "[VERSION] Source: manifest.json (v$Version)" -ForegroundColor Cyan
     } else {
-        $manifestPath = Join-Path $PSScriptRoot "..\frontend\src\manifest.json"
-        if (Test-Path $manifestPath) {
-            $manifest = Get-Content $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
-            $Version = $manifest.versionName
-            Write-Host "[VERSION] Read from manifest.json: v$Version" -ForegroundColor Cyan
+        # 如果没有 manifest.json，则尝试从 GitHub Tag 递增
+        $latestTag = gh release list --limit 1 --json tagName --jq ".[0].tagName" 2>$null
+        if ($latestTag -match "v?(\d+)\.(\d+)\.(\d+)") {
+            $major = [int]$Matches[1]
+            $minor = [int]$Matches[2]
+            $patch = [int]$Matches[3] + 1
+            $Version = "$major.$minor.$patch"
+            Write-Host "[VERSION] Auto-increment from $latestTag -> v$Version" -ForegroundColor Cyan
         } else {
             $Version = "1.0.0"
+            Write-Host "[VERSION] Default: v$Version" -ForegroundColor Cyan
         }
     }
 }
