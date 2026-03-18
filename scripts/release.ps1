@@ -142,13 +142,13 @@ if (Test-Path $manifestPath) {
 
     $oldVersion = $manifest.versionName
     if ($oldVersion -ne $Version) {
-        # 计算 versionCode（采用万位公式，如 1.0.6 → 10006）
+        # 计算 versionCode（采用万位公式，如 1.0.6 -> 10006）
         $versionParts = $Version -split "\."
         $versionCode = [int]$versionParts[0] * 10000 + [int]$versionParts[1] * 100 + [int]$versionParts[2]
 
         $manifestContent = $manifestContent -replace '"versionName"\s*:\s*"[^"]*"', "`"versionName`" : `"$Version`""
-        # 兼容数字和字符串格式的 versionCode
-        $manifestContent = $manifestContent -replace '"versionCode"\s*:\s*("?)(\d+)\1', "`"versionCode`" : $versionCode"
+        # 兼容数字和字符串格式的 versionCode (简化正则避免编码导致的解析错误)
+        $manifestContent = $manifestContent -replace '"versionCode"\s*:\s*"?(\d+)"?', "`"versionCode`" : $versionCode"
         Set-Content -Path $manifestPath -Value $manifestContent -Encoding UTF8
 
         Write-Host "[更新] 已更新 manifest.json: $oldVersion -> $Version (code: $versionCode)" -ForegroundColor Green
