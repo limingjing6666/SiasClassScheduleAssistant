@@ -29,9 +29,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: 确定 Release Tag
         id: tag
         run: |
@@ -44,10 +41,11 @@ jobs:
       - name: 从 Release 下载 APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 核心修复：显式指定仓库，避免 gh 报错寻找 .git 文件夹
+          GH_REPO: ${{ github.repository }} 
         run: |
           echo "📦 正在从 Release ${{ steps.tag.outputs.TAG }} 下载 APK..."
           gh release download "${{ steps.tag.outputs.TAG }}" \
-            --repo "${{ github.repository }}" \
             --pattern "*.apk" \
             --dir ./apk-download
           
@@ -63,18 +61,20 @@ jobs:
           fi
           echo "APK_FILE=$APK_FILE" >> $GITHUB_ENV
           echo "✅ 找到 APK: $APK_FILE"
-          
-          # 生成 update.json 并存入当前目录
+
+          # --- 【新增】自动生成 update.json ---
+          echo "🛠 正在生成 update.json..."
           VERSION_NAME=$(echo ${{ steps.tag.outputs.TAG }} | sed 's/v//')
+          # 自动转换版本号逻辑: v1.0.4 -> 1.0.4 -> 104
           V_MAJOR=$(echo $VERSION_NAME | cut -d. -f1)
           V_MINOR=$(echo $VERSION_NAME | cut -d. -f2)
           V_PATCH=$(echo $VERSION_NAME | cut -d. -f3)
           VERSION_CODE=$((V_MAJOR * 100 + V_MINOR * 10 + V_PATCH))
           
-          # 获取 Release Notes 并转义为 JSON 安全字符串
-          RELEASE_NOTES=$(gh release view "${{ steps.tag.outputs.TAG }}" --repo "${{ github.repository }}" --json body -q '.body')
+          # 抓取当前 Release 的 Release Notes
+          RELEASE_NOTES=$(gh release view "${{ steps.tag.outputs.TAG }}" --json body -q '.body')
           
-          # 构建 update.json
+          # 构建配置文件
           cat <<EOF > ./apk-download/update.json
           {
             "versionCode": ${VERSION_CODE},
@@ -111,15 +111,15 @@ jobs:
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "mkdir -p '${DEPLOY_PATH}'"
           
-          # 上传 APK（先传到临时文件，再原子性移动，避免下载到半成品）
+          # 上传 APK（先传到临时文件，再原子性移动）
           REMOTE_TMP="${DEPLOY_PATH}/.apk-uploading.tmp"
           REMOTE_DEST="${DEPLOY_PATH}/${APK_FILENAME}"
           
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             "$APK_FILE" \
             "${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_TMP}"
-            
-          # 上传 update.json
+          
+          # 【新增】上传 update.json
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             "./apk-download/update.json" \
             "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/update.json"
