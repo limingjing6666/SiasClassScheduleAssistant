@@ -69,7 +69,7 @@ jobs:
           VERSION_CODE=$((V_MAJOR * 100 + V_MINOR * 10 + V_PATCH))
           
           # 获取 Release Notes 并转义为 JSON 安全字符串
-          RELEASE_NOTES=$(gh release view "${{ steps.tag.outputs.TAG }}" --json body -q '.body')
+          RELEASE_NOTES=$(gh release view "${{ steps.tag.outputs.TAG }}" --repo "${{ github.repository }}" --json body -q '.body')
           
           # 构建 update.json
           cat <<EOF > ./apk-download/update.json
