@@ -64,17 +64,18 @@ export function setupClassReminders(courses: Course[], semesterStart: string) {
           
           // 如果触发时间在当前之后且在 7 天之内，则注册
           if (triggerTime > now.getTime() && triggerTime <= maxTime) {
-            const triggerDate = new Date(triggerTime);
-            
-            plus.push.createMessage(
-              `你的【${course.name}】将在 20 分钟后开始`,
-              JSON.stringify({ type: 'class_reminder', action: 'open_schedule' }),
-              {
-                title: `${course.room} 上课提醒`,
-                when: triggerDate
-              }
-            );
-            addedCount++;
+            const delaySeconds = Math.floor((triggerTime - now.getTime()) / 1000);
+            if (delaySeconds > 0) {
+              plus.push.createMessage(
+                `你的【${course.name}】将在 20 分钟后开始`,
+                JSON.stringify({ type: 'class_reminder', action: 'open_schedule' }),
+                {
+                  title: `${course.room} 上课提醒`,
+                  delay: delaySeconds // 核心修复：H5+ 原生推送必须使用 delay 才能真正延时弹出
+                }
+              );
+              addedCount++;
+            }
           }
         }
       }

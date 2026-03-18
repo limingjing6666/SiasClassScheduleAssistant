@@ -127,7 +127,7 @@ async function handleLogin() {
       lastSyncAt: new Date().toISOString()
     });
 
-    uni.showToast({ title: '同步成功', icon: 'success' });
+    uni.showToast({ title: '同步成功', icon: 'none' });
 
     // 跳转到课表页面
     setTimeout(() => {

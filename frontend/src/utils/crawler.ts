@@ -741,7 +741,7 @@ export function translateError(error: string): string {
     case 'RATE_LIMITED':
       return '教务系统请求过于频繁，请稍后再试';
     case 'NETWORK_ERROR':
-      return '教务系统连接失败。请确认当前是否在校园网内，或教务系统已暂时关闭公网访问（建议使用校园网或 VPN）。';
+      return '教务系统连接失败。请确认当前是否在校园网内，或教务系统已暂时关闭公网访问（建议使用校园网）。';
     default:
       return `未知错误: ${error}`;
   }

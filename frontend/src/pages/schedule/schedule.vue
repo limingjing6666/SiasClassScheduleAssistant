@@ -290,7 +290,7 @@ function toggleReminders() {
   const newState = !enableReminders.value;
   scheduleStore.setReminders(newState);
   if (newState) {
-    uni.showToast({ title: '已开启未来 7 天的课前提醒', icon: 'success' });
+    uni.showToast({ title: '已开启未来 7 天的课前提醒', icon: 'none' });
   } else {
     uni.showToast({ title: '已关闭提醒', icon: 'none' });
   }
@@ -403,7 +403,7 @@ function selectCalDate(cell: CalCell) {
     calYear.value = cell.year;
     calMonth.value = cell.month;
   }
-  uni.showToast({ title: '开学日期已设置', icon: 'success' });
+  uni.showToast({ title: '开学日期已设置', icon: 'none' });
 }
 
 function calSelectToday() {
@@ -412,7 +412,7 @@ function calSelectToday() {
   calMonth.value = today.getMonth() + 1;
   const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   scheduleStore.setSemesterStart(dateStr);
-  uni.showToast({ title: '已设置为今天', icon: 'success' });
+  uni.showToast({ title: '已设置为今天', icon: 'none' });
 }
 
 // 跳转到当前周
@@ -433,7 +433,7 @@ function goToCurrentWeek() {
     scheduleStore.setCurrentWeek(totalWeeks.value);
   } else {
     scheduleStore.setCurrentWeek(week);
-    uni.showToast({ title: `已跳转到第${week}周`, icon: 'success' });
+    uni.showToast({ title: `已跳转到第${week}周`, icon: 'none' });
   }
 }
 
@@ -500,7 +500,7 @@ function handleLogout() {
       if (res.confirm) {
         // 清除数据
         scheduleStore.clearData();
-        uni.showToast({ title: '已退出登录', icon: 'success' });
+        uni.showToast({ title: '已退出登录', icon: 'none' });
         // 跳转到登录页
         setTimeout(() => {
           uni.reLaunch({
