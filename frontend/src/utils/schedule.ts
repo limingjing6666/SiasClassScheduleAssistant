@@ -1,17 +1,18 @@
 import type { Course, RenderCourse } from '@/types';
 import { THEME_PALETTES } from '@/config/themes';
 
+const PALETTE = THEME_PALETTES.dark;
+
 /**
  * 根据课程名称生成固定颜色
  * 相同课程名始终显示相同颜色
  */
-export function getCourseColor(courseName: string, theme: string = 'dark'): string {
+export function getCourseColor(courseName: string): string {
   let hash = 0;
   for (let i = 0; i < courseName.length; i++) {
     hash = courseName.charCodeAt(i) + ((hash << 5) - hash);
   }
-  const palette = THEME_PALETTES[theme] || THEME_PALETTES.dark;
-  return palette.colors[Math.abs(hash) % palette.colors.length];
+  return PALETTE.colors[Math.abs(hash) % PALETTE.colors.length];
 }
 
 /**
@@ -25,13 +26,14 @@ export function parseNodes(nodes: string): { start: number; step: number } {
     const start = parseInt(parts[0], 10);
     const end = parseInt(parts[1], 10);
     return {
-      start: start,
-      step: end - start + 1
+      start: Number.isFinite(start) ? start : 1,
+      step: Number.isFinite(start) && Number.isFinite(end) ? end - start + 1 : 1
     };
   }
   // 单节课
+  const single = parseInt(nodes, 10);
   return {
-    start: parseInt(nodes, 10) || 1,
+    start: Number.isFinite(single) ? single : 1,
     step: 1
   };
 }
@@ -45,7 +47,7 @@ export function filterByWeek(courses: Course[], currentWeek: number): Course[] {
   return courses.filter(course => {
     // weeks 是二进制字符串，第n位表示第n周是否有课
     // 假设第0位忽略，所以取第currentWeek位
-    if (!course.weeks || course.weeks.length <= currentWeek) {
+    if (!course.weeks || currentWeek <= 0 || currentWeek >= course.weeks.length) {
       return false;
     }
     return course.weeks.charAt(currentWeek) === '1';
@@ -56,10 +58,9 @@ export function filterByWeek(courses: Course[], currentWeek: number): Course[] {
  * 将课程转换为渲染用数据
  * 确保同一天相邻的课程颜色不同
  */
-export function toRenderCourses(courses: Course[], theme: string = 'dark'): RenderCourse[] {
-  const palette = THEME_PALETTES[theme] || THEME_PALETTES.dark;
-  const colors = palette.colors;
-  const glowColors = palette.glowColors;
+export function toRenderCourses(courses: Course[]): RenderCourse[] {
+  const colors = PALETTE.colors;
+  const glowColors = PALETTE.glowColors;
 
   // 先按天和节次排序
   const sorted = [...courses].sort((a, b) => {
@@ -74,7 +75,7 @@ export function toRenderCourses(courses: Course[], theme: string = 'dark'): Rend
 
   return sorted.map(course => {
     const { start, step } = parseNodes(course.nodes);
-    let color = getCourseColor(course.name, theme);
+    let color = getCourseColor(course.name);
     
     // 如果和同一天上一节课颜色相同，换一个颜色
     const lastColor = lastColorByDay[course.day];

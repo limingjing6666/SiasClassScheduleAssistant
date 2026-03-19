@@ -1,5 +1,5 @@
 <template>
-  <view class="app" :class="['theme-' + scheduleStore.theme]">
+  <view class="app">
     <slot />
   </view>
 </template>
@@ -56,30 +56,6 @@ onHide(() => {
   --border: rgba(200, 122, 60, 0.15);
   --grid-line: rgba(200, 122, 60, 0.08);
   --card-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.3);
-}
-
-.theme-morandi {
-  --bg-primary: #f4f4f2;
-  --bg-secondary: #e8e8e8;
-  --bg-header: #e8e8e8;
-  --text-primary: #5f5f5f;
-  --text-secondary: rgba(95, 95, 95, 0.6);
-  --accent: #8e9775;
-  --border: rgba(142, 151, 117, 0.3);
-  --grid-line: rgba(0, 0, 0, 0.05);
-  --card-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.05);
-}
-
-.theme-light {
-  --bg-primary: #FBF8F1;
-  --bg-secondary: #F7F2E7;
-  --bg-header: #FBF8F1;
-  --text-primary: #4A4A4A;
-  --text-secondary: rgba(74, 74, 74, 0.5);
-  --accent: #7A9D8C;
-  --border: rgba(122, 157, 140, 0.15);
-  --grid-line: rgba(0, 0, 0, 0.04);
-  --card-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
 }
 
 /* ========================================

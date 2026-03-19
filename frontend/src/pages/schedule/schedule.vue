@@ -14,28 +14,6 @@
             <text class="week-num-arrow">▼</text>
           </view>
           
-          <!-- 主题切换 -->
-          <view class="theme-switch" @click="showThemePopup = !showThemePopup">
-            <text class="theme-icon">🎨</text>
-          </view>
-
-          <!-- 主题选择弹窗 -->
-          <view v-if="showThemePopup" class="week-popup-mask" @click="showThemePopup = false"></view>
-          <view v-if="showThemePopup" class="theme-popup-dropdown" @click.stop>
-            <view class="week-popup-title">精美配色</view>
-            <view class="theme-option" :class="{ active: scheduleStore.theme === 'dark' }" @click="selectTheme('dark')">
-              <view class="theme-preview dark-p"></view>
-              <text>经典深色</text>
-            </view>
-            <view class="theme-option" :class="{ active: scheduleStore.theme === 'morandi' }" @click="selectTheme('morandi')">
-              <view class="theme-preview morandi-p"></view>
-              <text>莫兰迪灰</text>
-            </view>
-            <view class="theme-option" :class="{ active: scheduleStore.theme === 'light' }" @click="selectTheme('light')">
-              <view class="theme-preview light-p"></view>
-              <text>浅色纸质</text>
-            </view>
-          </view>
           <!-- 周数选择弹窗（独立遮罩层） -->
           <view v-if="showWeekPopup" class="week-popup-mask" @click="showWeekPopup = false"></view>
           <view v-if="showWeekPopup" class="week-popup-dropdown" @click.stop>
@@ -62,16 +40,12 @@
           <text class="sync-text">上次同步: {{ formatSyncTime(userInfo.lastSyncAt) }}</text>
         </view>
         <view class="week-actions">
-          <view class="action-tag" @click="toggleReminders" :style="{ background: enableReminders ? 'rgba(200, 122, 60, 0.22)' : '' }">
-            <text class="action-tag-text">{{ enableReminders ? '🔕 关闭提醒' : '🔔 开启提醒' }}</text>
-          </view>
-          
           <view class="action-tag" @click="goToCurrentWeek">
             <text class="action-tag-text">本周</text>
           </view>
           
-          <view class="action-tag action-tag-right" @click="handleLogout">
-            <text class="action-tag-text">退出</text>
+          <view class="action-tag logout-tag" @click="handleLogout">
+            <text class="logout-tag-text">退出</text>
           </view>
         </view>
       </view>
@@ -271,13 +245,6 @@ function selectWeek(week: number) {
   showWeekPopup.value = false;
 }
 
-const showThemePopup = ref(false);
-
-function selectTheme(themeStr: string) {
-  scheduleStore.setTheme(themeStr);
-  showThemePopup.value = false;
-}
-
 // 状态
 const showDetail = ref(false);
 const selectedCourse = ref<RenderCourse | null>(null);
@@ -288,7 +255,6 @@ const totalWeeks = computed(() => scheduleStore.totalWeeks);
 const displayCourses = computed(() => scheduleStore.displayCourses);
 const semesterStart = computed(() => scheduleStore.semesterStart);
 const userInfo = computed(() => scheduleStore.userInfo);
-const enableReminders = computed(() => scheduleStore.enableReminders);
 
 function formatSyncTime(isoString: string): string {
   if (!isoString) return '未知';
@@ -313,8 +279,6 @@ const DAY_WIDTH = 100 / 7;
 
 // 生命周期
 onMounted(() => {
-  scheduleStore.loadFromCache();
-
   // 保护：如果没有用户信息或课程数据，回到登录页
   if (!scheduleStore.userInfo || scheduleStore.courses.length === 0) {
     uni.reLaunch({
@@ -324,22 +288,6 @@ onMounted(() => {
 });
 
 // 方法
-// 开启/关闭课前提醒
-function toggleReminders() {
-  // #ifndef APP-PLUS
-  uni.showToast({ title: '体验版/H5 无法使用该原生提醒', icon: 'none' });
-  return;
-  // #endif
-
-  const newState = !enableReminders.value;
-  scheduleStore.setReminders(newState);
-  if (newState) {
-    uni.showToast({ title: '已开启未来 7 天的课前提醒', icon: 'none' });
-  } else {
-    uni.showToast({ title: '已关闭提醒', icon: 'none' });
-  }
-}
-
 function prevWeek() {
   if (currentWeek.value > 1) {
     scheduleStore.setCurrentWeek(currentWeek.value - 1);
@@ -645,23 +593,6 @@ function handleLogout() {
   margin-left: 8rpx;
 }
 
-/* 主题按钮 */
-.theme-switch {
-  width: 56rpx;
-  height: 56rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 28rpx;
-  background: var(--bg-secondary);
-  border: 1rpx solid var(--border);
-  margin-left: 12rpx;
-}
-
-.theme-icon {
-  font-size: 28rpx;
-}
-
 /* 操作按钮栏 */
 .week-bar {
   padding: 8rpx 28rpx;
@@ -701,6 +632,17 @@ function handleLogout() {
   margin-left: auto;
 }
 
+.logout-tag {
+  background: transparent;
+  border-color: rgba(240, 230, 216, 0.15);
+}
+
+.logout-tag-text {
+  font-size: 24rpx;
+  color: rgba(240, 230, 216, 0.4);
+  font-weight: 500;
+}
+
 .calendar-tag {
   border-color: rgba(200, 122, 60, 0.5);
   background: rgba(200, 122, 60, 0.12);
@@ -735,49 +677,8 @@ function handleLogout() {
   box-shadow: var(--card-shadow);
   z-index: 200;
   overflow: hidden;
+  animation: popup-slide-down 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-
-.theme-popup-dropdown {
-  position: absolute;
-  right: 0;
-  top: 64rpx;
-  width: 320rpx;
-  background: var(--bg-secondary);
-  border: 1rpx solid var(--border);
-  border-radius: 20rpx;
-  box-shadow: var(--card-shadow);
-  z-index: 200;
-  padding: 12rpx;
-}
-
-.theme-option {
-  display: flex;
-  align-items: center;
-  padding: 20rpx;
-  border-radius: 12rpx;
-  margin-bottom: 8rpx;
-  font-size: 26rpx;
-  color: var(--text-primary);
-  opacity: 0.7;
-}
-
-.theme-option.active {
-  background: var(--bg-primary);
-  opacity: 1;
-  font-weight: 700;
-}
-
-.theme-preview {
-  width: 32rpx;
-  height: 32rpx;
-  border-radius: 50%;
-  margin-right: 20rpx;
-  border: 2rpx solid var(--border);
-}
-
-.dark-p { background: #1C1410; }
-.morandi-p { background: #8E9775; }
-.light-p { background: #7A9D8C; }
 
 .week-popup-title {
   font-size: 24rpx;
@@ -848,11 +749,11 @@ function handleLogout() {
   content: '';
   position: absolute;
   bottom: 0;
-  left: 20%;
-  right: 20%;
-  height: 4rpx;
+  left: 15%;
+  right: 15%;
+  height: 6rpx;
   background: #C87A3C;
-  border-radius: 2rpx;
+  border-radius: 3rpx;
 }
 
 .header-time-text {
@@ -888,6 +789,19 @@ function handleLogout() {
 
 .day-date.today-text {
   color: #C87A3C;
+  position: relative;
+}
+
+.day-date.today-text::after {
+  content: '';
+  position: absolute;
+  bottom: -8rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
+  background: #C87A3C;
 }
 
 /* ========== 课表主体 ========== */
@@ -947,7 +861,7 @@ function handleLogout() {
 }
 
 .grid-column.today-column {
-  background: rgba(200, 122, 60, 0.06);
+  background: rgba(200, 122, 60, 0.1);
 }
 
 .grid-cell {
@@ -958,8 +872,8 @@ function handleLogout() {
 /* ========== 课程块 ========== */
 .course-block {
   position: absolute;
-  border-radius: 10rpx;
-  padding: 8rpx 6rpx;
+  border-radius: 16rpx;
+  padding: 8rpx 6rpx 8rpx 12rpx;
   box-sizing: border-box;
   overflow: hidden;
   display: flex;
@@ -969,6 +883,23 @@ function handleLogout() {
   margin: 3rpx;
   text-align: center;
   border: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.course-block::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8rpx;
+  bottom: 8rpx;
+  width: 6rpx;
+  border-radius: 0 3rpx 3rpx 0;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.course-block:active {
+  transform: scale(0.96);
+  box-shadow: none !important;
 }
 
 .course-name {
@@ -984,12 +915,6 @@ function handleLogout() {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   text-shadow: 0 1rpx 3rpx rgba(0, 0, 0, 0.4);
-}
-
-/* 浅色主题下增强文字对比度 */
-.theme-light .course-name,
-.theme-morandi .course-name {
-  text-shadow: 0 1rpx 4rpx rgba(0, 0, 0, 0.5);
 }
 
 .course-room {
@@ -1016,6 +941,7 @@ function handleLogout() {
   justify-content: center;
   z-index: 1000;
   backdrop-filter: blur(8rpx);
+  animation: overlay-fade-in 0.25s ease;
 }
 
 .detail-card {
@@ -1026,6 +952,7 @@ function handleLogout() {
   border-radius: 32rpx;
   overflow: hidden;
   box-shadow: var(--card-shadow);
+  animation: detail-pop-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* 顶部彩色横幅 */
@@ -1288,5 +1215,33 @@ function handleLogout() {
 
 .cal-footer-primary-text {
   color: #C87A3C;
+}
+
+/* ========== 动画 ========== */
+@keyframes overlay-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes detail-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes popup-slide-down {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-16rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 </style>

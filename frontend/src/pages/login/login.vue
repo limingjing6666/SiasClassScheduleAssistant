@@ -49,9 +49,10 @@
 
           <button
             class="login-btn"
+            :disabled="loading"
             @click="handleLogin"
           >
-            登 录
+            {{ loading ? '登录中...' : '登 录' }}
           </button>
 
           <!-- 错误提示横幅 -->
@@ -141,9 +142,9 @@ async function handleLogin() {
       lastSyncAt: new Date().toISOString()
     });
 
-    uni.showToast({ title: '同步成功', icon: 'none' });
+    uni.showToast({ title: '同步成功', icon: 'none', duration: 1000 });
 
-    // 跳转到课表页面
+    // 跳转到课表页面（等待 toast 结束后再跳转）
     setTimeout(() => {
       uni.reLaunch({
         url: '/pages/schedule/schedule'
@@ -238,7 +239,7 @@ async function handleLogin() {
 
 /* 同步骨架屏样式 */
 .sync-skeleton {
-  padding: 60rpx 48rpx;
+  padding: 20rpx 48rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
