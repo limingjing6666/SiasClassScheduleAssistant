@@ -55,34 +55,41 @@ function promptUpdate(updateData: any) {
 function doDownload(url: string) {
   // #ifdef APP-PLUS
   uni.showLoading({ title: '正在下载更新包...', mask: true });
-  
-  const downloadTask = uni.downloadFile({
+
+  uni.downloadFile({
     url: url,
     success: (downloadResult) => {
+      uni.hideLoading();
       if (downloadResult.statusCode === 200) {
-        uni.hideLoading();
-        // 安装 APK 或 WGT
-        plus.runtime.install(
-          downloadResult.tempFilePath,
-          { force: false },
-          () => {
-            // 如果是 wgt，应当主动重启；如果是 apk，系统会拉起安装器
-            if (url.endsWith('.wgt')) {
-              plus.runtime.restart();
+        const filePath = downloadResult.tempFilePath;
+        const isApk = url.toLowerCase().endsWith('.apk');
+
+        if (isApk) {
+          // APK 文件：调起系统安装器
+          plus.runtime.openFile(filePath, {}, (e) => {
+            console.error('[Update] 打开 APK 失败', e);
+            uni.showToast({ title: '打开安装包失败', icon: 'none' });
+          });
+        } else {
+          // WGT 热更新资源包：静默安装并重启
+          plus.runtime.install(
+            filePath,
+            { force: false },
+            () => { plus.runtime.restart(); },
+            (e) => {
+              console.error('[Update] WGT 安装失败', e);
+              uni.showToast({ title: '安装更新失败', icon: 'none' });
             }
-          },
-          (e) => {
-            uni.showToast({ title: '安装更新失败', icon: 'none' });
-            console.error('[Update] 安装失败', e);
-          }
-        );
+          );
+        }
       } else {
-        uni.hideLoading();
+        console.error('[Update] 下载失败, statusCode:', downloadResult.statusCode);
         uni.showToast({ title: '下载失败，请稍后重试', icon: 'none' });
       }
     },
-    fail: () => {
+    fail: (err) => {
       uni.hideLoading();
+      console.error('[Update] 下载请求失败', err);
       uni.showToast({ title: '网络连接失败，无法下载更新', icon: 'none' });
     }
   });
