@@ -886,16 +886,6 @@ function handleLogout() {
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.course-block::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 8rpx;
-  bottom: 8rpx;
-  width: 6rpx;
-  border-radius: 0 3rpx 3rpx 0;
-  background: rgba(255, 255, 255, 0.45);
-}
 
 .course-block:active {
   transform: scale(0.96);
