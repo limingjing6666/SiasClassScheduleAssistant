@@ -3,7 +3,7 @@
     <view class="header">
       <view class="status-bar"></view>
       <view class="header-main">
-        <text class="header-title">我的课表 🌟</text>
+        <text class="header-title">我的课表 🚀</text>
         <view class="week-nav">
           <view class="nav-arrow" @click="prevWeek">
             <text class="arrow">❮</text>
