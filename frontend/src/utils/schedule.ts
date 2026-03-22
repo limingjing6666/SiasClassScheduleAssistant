@@ -1,7 +1,7 @@
 import type { Course, RenderCourse } from '@/types';
 import { THEME_PALETTES } from '@/config/themes';
 
-const PALETTE = THEME_PALETTES.dark;
+const PALETTE = THEME_PALETTES.minimalist;
 
 /**
  * 根据课程名称生成固定颜色

@@ -43,19 +43,19 @@ onHide(() => {
 
 <style>
 /* ========================================
-   1. 核心主题变量定义
+   1. 核心主题变量定义 (极简单色)
    ======================================== */
 :root {
-  /* 默认深色 (Classic Dark) */
-  --bg-primary: #1C1410;
-  --bg-secondary: #2A1E16;
-  --bg-header: #1C1410;
-  --text-primary: #F0E6D8;
-  --text-secondary: rgba(240, 230, 216, 0.4);
-  --accent: #C87A3C;
-  --border: rgba(200, 122, 60, 0.15);
-  --grid-line: rgba(200, 122, 60, 0.08);
-  --card-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.3);
+  /* 纯平极简亮色 (Minimalist Light) */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #FFFFFF;
+  --bg-header: #FFFFFF;
+  --text-primary: #000000;
+  --text-secondary: #888888;
+  --accent: #000000;
+  --border: rgba(0, 0, 0, 0.06);
+  --grid-line: rgba(0, 0, 0, 0.03);
+  --card-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.04);
 }
 
 /* ========================================

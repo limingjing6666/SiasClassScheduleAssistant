@@ -16,4 +16,17 @@ export const THEME_PALETTES: Record<string, { colors: string[], glowColors: stri
       '#BB7A5A', '#9A8A5A', '#7A5A4A', '#AB9A6A',
     ]
   },
+  // 极简纯净色块 (极浅色调)
+  minimalist: {
+    colors: [
+      '#F4F6F8', '#F9F5F0', '#F0F7F4', '#FCF2F2',
+      '#F4F1F8', '#F2FBF9', '#FDF6EB', '#F5F5FA',
+      '#FDF4EC', '#EEF6F8', '#F8EFF2', '#F1F4F9',
+    ],
+    glowColors: [ // 在极简下不使用发光，这里保留纯色防报错
+      '#F4F6F8', '#F9F5F0', '#F0F7F4', '#FCF2F2',
+      '#F4F1F8', '#F2FBF9', '#FDF6EB', '#F5F5FA',
+      '#FDF4EC', '#EEF6F8', '#F8EFF2', '#F1F4F9',
+    ]
+  },
 };

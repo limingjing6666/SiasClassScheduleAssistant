@@ -76,74 +76,6 @@ interface RequestResult {
   header: Record<string, string>;
 }
 
-// #ifdef H5
-/**
- * H5 模式 —— 使用原生 fetch() API
- *
- * 为什么不用 uni.request？
- * 1. uni.request 底层用 XMLHttpRequest，浏览器禁止手动设置 Cookie / Referer / User-Agent
- * 2. XMLHttpRequest.getResponseHeader('Set-Cookie') 被规范禁止，拿不到服务端 cookie
- * 3. XMLHttpRequest 没有 response.url，无法获取 302 跳转后的最终 URL
- *
- * fetch() 解决了以上所有问题：
- * - credentials: 'include' 让浏览器自动管理 cookie（通过 Vite proxy 互通）
- * - response.url 返回最终落地 URL（等同 Python requests 的 res.url）
- * - response.text() 获取完整响应文本
- */
-function uniRequest(
-  url: string,
-  options: {
-    method?: 'GET' | 'POST';
-    header?: Record<string, string>;
-    data?: string | Record<string, string>;
-    cookieJar: CookieJar;
-    timeout?: number;
-  }
-): Promise<RequestResult> {
-  const { method = 'GET', header = {}, data, timeout = 15000 } = options;
-
-  // H5 模式下不设置禁止头（User-Agent / Referer / Cookie），由浏览器 + proxy 处理
-  const cleanHeaders: Record<string, string> = {};
-  for (const [k, v] of Object.entries(header)) {
-    const lower = k.toLowerCase();
-    if (lower === 'cookie' || lower === 'user-agent' || lower === 'referer') continue;
-    cleanHeaders[k] = v;
-  }
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-
-  const fetchOptions: RequestInit = {
-    method,
-    headers: cleanHeaders,
-    credentials: 'include',    // ★ 让浏览器自动携带/保存 cookie
-    signal: controller.signal,
-    redirect: 'follow',        // 自动跟随 302，response.url 为最终 URL
-  };
-
-  if (data) {
-    fetchOptions.body = typeof data === 'string' ? data : JSON.stringify(data);
-  }
-
-  return fetch(url, fetchOptions)
-    .then(async (response) => {
-      clearTimeout(timer);
-      const text = await response.text();
-      return {
-        text,
-        url: response.url,     // ★ 最终 URL（等同 Python res.url）
-        header: Object.fromEntries(response.headers.entries())
-      };
-    })
-    .catch((err) => {
-      clearTimeout(timer);
-      console.error('[H5 request] fetch failed:', err);
-      throw new Error('NETWORK_ERROR');
-    });
-}
-// #endif
-
-// #ifndef H5
 /**
  * App 原生模式 —— 使用 uni.request + 手动 CookieJar 管理
  *
@@ -196,9 +128,6 @@ function uniRequest(
             break;
           }
         }
-        // 首次请求打印所有响应头 key，帮助诊断
-        console.log(`[App headers] ${method} ${url.split('/eams')[1] || url}: keys=[${Object.keys(res.header || {}).join(', ')}]`);
-
         if (rawSetCookie) {
           // 有些运行时用逗号拼接多条，有些用数组，有些只返回一条
           let cookies: string[];
@@ -211,13 +140,9 @@ function uniRequest(
             cookies = [String(rawSetCookie)];
           }
           cookieJar.update(cookies);
-          console.log(`[App cookie] Updated from ${method} ${url.split('/eams')[1] || url}: ${cookieJar.toString().substring(0, 200)}`);
-        } else {
-          console.log(`[App cookie] No Set-Cookie in ${method} ${url.split('/eams')[1] || url}`);
         }
 
         const text = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
-        console.log(`[App request] ${method} ${url.split('/eams')[1] || url} → ${text.length} bytes, status: ${res.statusCode}`);
 
         resolve({
           text,
@@ -232,7 +157,6 @@ function uniRequest(
     });
   });
 }
-// #endif
 
 /**
  * 针对 POST 表单提交，将对象编码为 application/x-www-form-urlencoded
@@ -291,12 +215,7 @@ const ORIGIN_URL = 'https://jwxt.sias.edu.cn';
  * - 原生 App 直连教务系统
  */
 function getBaseUrl(): string {
-  // #ifdef H5
-  return '/eams';
-  // #endif
-  // #ifndef H5
   return `${ORIGIN_URL}/eams`;
-  // #endif
 }
 
 export class SiasCrawler {
@@ -317,16 +236,11 @@ export class SiasCrawler {
     // H5 模式下 User-Agent 和 Referer 是浏览器禁止修改的 unsafe header，
     // 强行设置会被浏览器忽略并在 Console 报 "Refused to set unsafe header"。
     // App 原生模式下可以正常设置。
-    // #ifdef H5
-    this.headers = {};
-    // #endif
-    // #ifndef H5
     this.headers = {
       'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Referer': `${this.baseUrl}/login.action`
     };
-    // #endif
   }
 
   // ----------------------------------------------------------
@@ -450,9 +364,7 @@ export class SiasCrawler {
       if (match) {
         let innerUrl = match[1];
         if (innerUrl.startsWith('/eams')) {
-          // #ifndef H5
           innerUrl = ORIGIN_URL + innerUrl;
-          // #endif
         } else {
           innerUrl = `${this.baseUrl}/${innerUrl}`;
         }
@@ -499,9 +411,7 @@ export class SiasCrawler {
         if (matchDetail) {
           let innerDetail = matchDetail[1];
           if (innerDetail.startsWith('/eams')) {
-            // #ifndef H5
             innerDetail = ORIGIN_URL + innerDetail;
-            // #endif
           } else {
             innerDetail = `${this.baseUrl}/${innerDetail}`;
           }

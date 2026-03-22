@@ -64,24 +64,23 @@ function doDownload(url: string) {
         const filePath = downloadResult.tempFilePath;
         const isApk = url.toLowerCase().endsWith('.apk');
 
-        if (isApk) {
-          // APK 文件：调起系统安装器
-          plus.runtime.openFile(filePath, {}, (e) => {
-            console.error('[Update] 打开 APK 失败', e);
-            uni.showToast({ title: '打开安装包失败', icon: 'none' });
-          });
-        } else {
-          // WGT 热更新资源包：静默安装并重启
-          plus.runtime.install(
-            filePath,
-            { force: false },
-            () => { plus.runtime.restart(); },
-            (e) => {
-              console.error('[Update] WGT 安装失败', e);
-              uni.showToast({ title: '安装更新失败', icon: 'none' });
+        // 统一采用推荐的 plus.runtime.install，并 force: true 强行绕过验证墙
+        plus.runtime.install(
+          filePath,
+          { force: true },
+          () => {
+            if (isApk) {
+              console.log('[Update] APK 安装程序已由系统调起');
+            } else {
+              uni.showToast({ title: '热更新安装完毕，即将重启', icon: 'none' });
+              setTimeout(() => { plus.runtime.restart(); }, 1500);
             }
-          );
-        }
+          },
+          (e) => {
+            console.error('[Update] 安装包覆盖失败', e);
+            uni.showToast({ title: '安装失败，请检查包结构或权限', icon: 'none' });
+          }
+        );
       } else {
         console.error('[Update] 下载失败, statusCode:', downloadResult.statusCode);
         uni.showToast({ title: '下载失败，请稍后重试', icon: 'none' });
