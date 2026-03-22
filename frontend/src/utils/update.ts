@@ -56,17 +56,19 @@ function doDownload(url: string) {
   // #ifdef APP-PLUS
   uni.showLoading({ title: '正在下载更新包...', mask: true });
 
-  uni.downloadFile({
-    url: url,
-    success: (downloadResult) => {
-      uni.hideLoading();
-      if (downloadResult.statusCode === 200) {
-        const filePath = downloadResult.tempFilePath;
-        const isApk = url.toLowerCase().endsWith('.apk');
+  const isApk = url.toLowerCase().includes('.apk');
+  const extension = isApk ? '.apk' : '.wgt';
+  const savePath = '_doc/update/sias_update_' + new Date().getTime() + extension;
 
-        // 统一采用推荐的 plus.runtime.install，并 force: true 强行绕过验证墙
+  const dtask = plus.downloader.createDownload(
+    url,
+    { filename: savePath },
+    (downloadResult, status) => {
+      uni.hideLoading();
+      if (status === 200 && downloadResult.filename) {
+        // 确保使用带正确后缀的本地文件路径
         plus.runtime.install(
-          filePath,
+          downloadResult.filename,
           { force: true },
           () => {
             if (isApk) {
@@ -78,19 +80,16 @@ function doDownload(url: string) {
           },
           (e) => {
             console.error('[Update] 安装包覆盖失败', e);
-            uni.showToast({ title: '安装失败，请检查包结构或权限', icon: 'none' });
+            uni.showToast({ title: '安装失败，请检查包结构', icon: 'none' });
           }
         );
       } else {
-        console.error('[Update] 下载失败, statusCode:', downloadResult.statusCode);
-        uni.showToast({ title: '下载失败，请稍后重试', icon: 'none' });
+        console.error('[Update] 下载失败, status:', status);
+        uni.showToast({ title: '下载失败，请确认网络连接', icon: 'none' });
       }
-    },
-    fail: (err) => {
-      uni.hideLoading();
-      console.error('[Update] 下载请求失败', err);
-      uni.showToast({ title: '网络连接失败，无法下载更新', icon: 'none' });
     }
-  });
+  );
+
+  dtask.start();
   // #endif
 }
