@@ -175,7 +175,7 @@ graph TD
     GetSemester -->|否| Error
     GetSemester -->|是| PostData[POST课程数据]
     PostData --> Parse[解析TaskActivity]
-    Parse --> Return[返回Course[]]
+    Parse --> Return["返回Course[]"]
 ```
 
 ## 状态管理流程图
