@@ -2,10 +2,9 @@
 # 依赖 & 包管理
 # ========================
 node_modules/
-package-lock.json
 yarn.lock
 pnpm-lock.yaml
-.yarn/
+.pnpm-store/
 
 # ========================
 # 构建产物 & 缓存
@@ -16,11 +15,11 @@ build/
 .cache/
 .temp/
 *.tsbuildinfo
+unpackage/
 
 # ========================
 # Uni-app / HBuilderX
 # ========================
-unpackage/
 .hbuilderx/
 
 # ========================
@@ -48,6 +47,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+build_err.txt
 
 # ========================
 # 操作系统
@@ -58,9 +58,11 @@ Desktop.ini
 ehthumbs.db
 
 # ========================
-# 浏览器缓存
+# 其他
 # ========================
-.cache/
-.temp/
 CLAUDE.md
-
+frontend/.github/
+frontend/.hbuilderx/
+frontend/node_modules/
+frontend/dist/
+frontend/unpackage/

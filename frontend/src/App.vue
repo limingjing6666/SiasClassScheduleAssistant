@@ -8,12 +8,14 @@
 import { onLaunch, onShow, onHide } from '@dcloudio/uni-app';
 import { checkUpdate } from '@/utils/update';
 import { useScheduleStore } from '@/stores/schedule';
+import { scheduleTodayReminders } from '@/utils/reminder';
+import { handleFirstTimePermission } from '@/utils/permission';
 
 const scheduleStore = useScheduleStore();
 
-onLaunch(() => {
+onLaunch(async () => {
   console.log('App Launch');
-  
+
   // 加载缓存
   scheduleStore.loadFromCache();
 
@@ -30,6 +32,22 @@ onLaunch(() => {
       url: '/pages/schedule/schedule'
     });
   }
+
+  // #ifdef APP-PLUS
+  // 处理权限请求（首次弹窗或静默检查）
+  const hasPermission = await handleFirstTimePermission();
+
+  // 设置今日提醒（仅在有权限时）
+  if (hasPermission && cachedCourses) {
+    try {
+      const courses = JSON.parse(cachedCourses);
+      const currentWeek = scheduleStore.currentWeek;
+      scheduleTodayReminders(courses, currentWeek);
+    } catch (e) {
+      console.error('[App] 设置提醒失败:', e);
+    }
+  }
+  // #endif
 });
 
 onShow(() => {

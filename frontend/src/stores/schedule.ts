@@ -1,8 +1,10 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { Course, UserInfo } from '@/types';
+import type { ReminderSettings } from '@/types/reminder';
 import { filterByWeek, toRenderCourses } from '@/utils/schedule';
 import { SCHEDULE_CONFIG } from '@/config/schedule';
+import { DEFAULT_REMINDER_SETTINGS, REMINDER_CACHE_KEY } from '@/config/reminder';
 
 export const useScheduleStore = defineStore('schedule', () => {
   // 状态
@@ -98,6 +100,25 @@ export const useScheduleStore = defineStore('schedule', () => {
     uni.removeStorageSync('userInfo');
   }
 
+  // 提醒设置
+  const reminderSettings = ref<ReminderSettings>(DEFAULT_REMINDER_SETTINGS);
+
+  function loadReminderSettings() {
+    const cached = uni.getStorageSync(REMINDER_CACHE_KEY);
+    if (cached) {
+      try {
+        reminderSettings.value = JSON.parse(cached);
+      } catch {
+        reminderSettings.value = DEFAULT_REMINDER_SETTINGS;
+      }
+    }
+  }
+
+  function setReminderSettings(settings: ReminderSettings) {
+    reminderSettings.value = settings;
+    uni.setStorageSync(REMINDER_CACHE_KEY, JSON.stringify(settings));
+  }
+
   return {
     courses,
     currentWeek,
@@ -106,12 +127,15 @@ export const useScheduleStore = defineStore('schedule', () => {
     loading,
     semesterStart,
     displayCourses,
+    reminderSettings,
     setCourses,
     setCurrentWeek,
     setUserInfo,
     setSemesterStart,
     loadFromCache,
     clearData,
-    clearUserData
+    clearUserData,
+    loadReminderSettings,
+    setReminderSettings
   };
 });
