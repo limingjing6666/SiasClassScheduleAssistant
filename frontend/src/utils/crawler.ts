@@ -227,6 +227,8 @@ export class SiasCrawler {
   private userId: string | null = null;
   /** 【关键】初始为 null，强制从网页抓取 */
   private currentSemesterId: string | null = null;
+  /** 所有学期列表 */
+  private allSemesters: Array<{id: number, schoolYear: string, name: string}> = [];
 
   constructor(username: string, password: string) {
     this.username = username;
@@ -309,6 +311,7 @@ export class SiasCrawler {
       const text = loginRes.text;
       const hasSalt = !!text.match(/CryptoJS\.SHA1\('/);
       console.log('[login] POST len:', text.length, 'hasSalt:', hasSalt);
+      console.log('[login] Cookie after login:', this.cookieJar.toString());
 
       if (isRateLimited(text)) {
         console.log('[login] ✗ Rate limited even after retries');
@@ -602,6 +605,142 @@ export class SiasCrawler {
     this.cookieJar.clear();
     this.userId = null;
     this.currentSemesterId = null;
+    this.allSemesters = [];
+  }
+
+  /**
+   * 获取所有学期列表（用于查看历史学期功能）
+   * @returns 是否获取成功
+   */
+  async fetchSemesters(): Promise<boolean> {
+    try {
+      console.log('[fetchSemesters] Requesting:', `${this.baseUrl}/dataQuery.action`);
+      console.log('[fetchSemesters] Cookie before:', this.cookieJar.toString());
+      
+      // 构建请求数据
+      const formData: Record<string, string> = {
+        dataType: 'semesterCalendar'
+      };
+      
+      console.log('[fetchSemesters] Request data:', encodeFormData(formData));
+      
+      const semesterRes = await requestWithRetry(`${this.baseUrl}/dataQuery.action`, {
+        method: 'POST',
+        header: {
+          ...this.headers,
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        data: encodeFormData(formData),
+        cookieJar: this.cookieJar,
+        timeout: 10000
+      });
+
+      console.log('[fetchSemesters] Cookie after:', this.cookieJar.toString());
+      console.log('[fetchSemesters] Response length:', semesterRes.text.length);
+      console.log('[fetchSemesters] Full response:', semesterRes.text);
+      console.log('[fetchSemesters] Response bytes:', Array.from(semesterRes.text).map(c => c.charCodeAt(0)).slice(0, 20));
+      
+      // 检查是否是HTML页面（可能是登录页面）
+      if (semesterRes.text.includes('DOCTYPE') || semesterRes.text.includes('html')) {
+        console.error('[fetchSemesters] Response is HTML, not JSON');
+        return false;
+      }
+
+      // 检查响应是否为空
+      if (!semesterRes.text || semesterRes.text.trim() === '') {
+        console.error('[fetchSemesters] Response is empty');
+        return false;
+      }
+
+      // 尝试解析JSON
+      let semesterData: any;
+      try {
+        // 去除响应开头的空白字符（tab、回车、换行）
+        const cleanedText = semesterRes.text.trim();
+        console.log('[fetchSemesters] Cleaned response length:', cleanedText.length);
+        console.log('[fetchSemesters] Cleaned response preview:', cleanedText.substring(0, 100));
+        
+        // 将JavaScript对象字面量转换为JSON格式
+        // {yearDom:"..."} → {"yearDom":"..."}
+        const jsonText = cleanedText.replace(/([{,])\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":');
+        console.log('[fetchSemesters] Converted to JSON preview:', jsonText.substring(0, 100));
+        
+        semesterData = JSON.parse(jsonText);
+      } catch (parseError: any) {
+        console.error('[fetchSemesters] JSON parse error:', parseError.message);
+        console.error('[fetchSemesters] Response that failed to parse:', semesterRes.text);
+        return false;
+      }
+      
+      console.log('[fetchSemesters] Parsed JSON:', JSON.stringify(semesterData).substring(0, 200));
+
+      // 检查semesters是否存在
+      if (!semesterData.semesters) {
+        console.error('[fetchSemesters] No semesters in response');
+        return false;
+      }
+
+      // 检查semesters是否为空
+      if (Object.keys(semesterData.semesters).length === 0) {
+        console.error('[fetchSemesters] semesters is empty');
+        return false;
+      }
+
+      // 保存所有学期列表
+      this.allSemesters = [];
+      for (const yearKey in semesterData.semesters) {
+        this.allSemesters.push(...semesterData.semesters[yearKey]);
+      }
+
+      console.log('[fetchSemesters] Loaded semesters:', this.allSemesters.length);
+      return true;
+    } catch (e: any) {
+      console.error('[fetchSemesters] Failed:', e instanceof Error ? e.message : e);
+      return false;
+    }
+  }
+
+  /**
+   * 获取所有学期列表
+   * @returns 学期列表
+   */
+  getSemesters(): Array<{id: number, schoolYear: string, name: string}> {
+    return this.allSemesters;
+  }
+
+  /**
+   * 切换到指定学期
+   * @param semesterId 学期ID
+   */
+  setSemester(semesterId: string): void {
+    this.currentSemesterId = semesterId;
+    console.log('[setSemester] Switched to semester:', semesterId);
+  }
+
+  /**
+   * 获取用户ID
+   * @returns 用户ID
+   */
+  getUserId(): string | null {
+    return this.userId;
+  }
+
+  /**
+   * 设置用户ID
+   * @param userId 用户ID
+   */
+  setUserId(userId: string): void {
+    this.userId = userId;
+    console.log('[setUserId] Set user ID:', userId);
+  }
+
+  /**
+   * 获取当前学期ID
+   * @returns 当前学期ID
+   */
+  getCurrentSemesterId(): string | null {
+    return this.currentSemesterId;
   }
 }
 

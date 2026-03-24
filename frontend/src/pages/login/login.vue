@@ -111,11 +111,13 @@ async function handleLogin() {
     scheduleStore.setCourses(courses);
     scheduleStore.setUserInfo({
       studentId: username.value.trim(),
+      username: username.value.trim(),
+      password: password.value,
       lastSyncAt: new Date().toISOString()
     });
 
     setTimeout(() => {
-      uni.reLaunch({
+      uni.switchTab({
         url: '/pages/schedule/schedule'
       });
     }, 500);

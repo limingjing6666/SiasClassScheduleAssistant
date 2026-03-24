@@ -28,7 +28,7 @@ onLaunch(async () => {
   const cachedUser = uni.getStorageSync('userInfo');
   const cachedCourses = uni.getStorageSync('courses');
   if (cachedUser && cachedCourses) {
-    uni.reLaunch({
+    uni.switchTab({
       url: '/pages/schedule/schedule'
     });
   }

@@ -5,14 +5,14 @@
       "style": {
         "navigationBarTitleText": "",
         "navigationStyle": "custom",
-        "navigationBarBackgroundColor": "#1C1410",
+        "navigationBarBackgroundColor": "#FFFFFF",
         "disableScroll": true,
         "app-plus": {
           "titleNView": false,
           "bounce": "none",
           "scrollIndicator": "none",
           "statusBar": {
-            "style": "light"
+            "style": "dark"
           }
         }
       }
@@ -22,20 +22,80 @@
       "style": {
         "navigationBarTitleText": "",
         "navigationStyle": "custom",
-        "navigationBarTextStyle": "white",
-        "navigationBarBackgroundColor": "#1C1410",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "enablePullDownRefresh": true,
+        "onReachBottomDistance": 50,
         "app-plus": {
           "statusBar": {
-            "style": "light"
+            "style": "dark"
+          }
+        }
+      }
+    },
+    {
+      "path": "pages/score/score",
+      "style": {
+        "navigationBarTitleText": "成绩查询",
+        "navigationStyle": "custom",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "app-plus": {
+          "statusBar": {
+            "style": "dark"
+          }
+        }
+      }
+    },
+    {
+      "path": "pages/more/more",
+      "style": {
+        "navigationBarTitleText": "更多",
+        "navigationStyle": "custom",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "app-plus": {
+          "statusBar": {
+            "style": "dark"
+          }
+        }
+      }
+    },
+    {
+      "path": "pages/history/history",
+      "style": {
+        "navigationBarTitleText": "历史课表",
+        "navigationStyle": "custom",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "app-plus": {
+          "statusBar": {
+            "style": "dark"
           }
         }
       }
     }
   ],
+  "tabBar": {
+    "color": "#888888",
+    "selectedColor": "#000000",
+    "borderStyle": "black",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {
+        "pagePath": "pages/schedule/schedule",
+        "text": "课表"
+      },
+      {
+        "pagePath": "pages/score/score",
+        "text": "成绩"
+      },
+      {
+        "pagePath": "pages/more/more",
+        "text": "更多"
+      }
+    ]
+  },
   "globalStyle": {
-    "navigationBarTextStyle": "white",
+    "navigationBarTextStyle": "black",
     "navigationBarTitleText": "西亚斯课表",
-    "navigationBarBackgroundColor": "#1C1410",
-    "backgroundColor": "#1C1410"
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "backgroundColor": "#FFFFFF"
   }
 }

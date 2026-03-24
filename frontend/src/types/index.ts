@@ -32,6 +32,10 @@ export interface SyncRequest {
 export interface UserInfo {
   /** 学号 */
   studentId: string;
+  /** 用户名（学号） */
+  username?: string;
+  /** 密码 */
+  password?: string;
   /** 姓名 */
   name?: string;
   /** 最后同步时间 */

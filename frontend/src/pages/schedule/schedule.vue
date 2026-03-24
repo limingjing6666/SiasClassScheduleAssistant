@@ -26,9 +26,6 @@
           <view class="action-tag" @click="goToCurrentWeek">
             <text class="action-tag-text">本周</text>
           </view>
-          <view class="action-tag logout-tag" @click="handleLogout">
-            <text class="logout-tag-text">退出</text>
-          </view>
         </view>
       </view>
     </view>
@@ -120,8 +117,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { onPullDownRefresh } from '@dcloudio/uni-app';
 import { useScheduleStore } from '@/stores/schedule';
 import { getDayName, getNodeTimeRange } from '@/utils/schedule';
+import { syncSchedule } from '@/api/schedule';
 import type { RenderCourse } from '@/types';
 
 import WeekSelector from '@/components/WeekSelector.vue';
@@ -139,7 +138,10 @@ const selectedCourse = ref<RenderCourse | null>(null);
 
 const currentWeek = computed(() => scheduleStore.currentWeek);
 const totalWeeks = computed(() => scheduleStore.totalWeeks);
-const displayCourses = computed(() => scheduleStore.displayCourses);
+const displayCourses = computed(() => {
+  console.log('[Schedule] Computing displayCourses, courses count:', scheduleStore.courses.length);
+  return scheduleStore.displayCourses;
+});
 const semesterStart = computed(() => scheduleStore.semesterStart);
 const userInfo = computed(() => scheduleStore.userInfo);
 
@@ -251,22 +253,66 @@ function closeDetail() {
   selectedCourse.value = null;
 }
 
-function handleLogout() {
-  uni.showModal({
-    title: '退出登录',
-    content: '确定要退出吗？',
-    success: (res) => {
-      if (res.confirm) {
-        scheduleStore.clearData();
-        setTimeout(() => {
-          uni.reLaunch({
-            url: '/pages/login/login'
-          });
-        }, 100);
-      }
+// 下拉刷新
+async function handlePullDownRefresh() {
+  console.log('[Schedule] Pull down refresh started');
+  
+  try {
+    // 1. 获取本地存储的账号密码
+    const cachedUser = uni.getStorageSync('userInfo');
+    console.log('[Schedule] cachedUser:', cachedUser);
+    
+    if (!cachedUser) {
+      console.log('[Schedule] No cached user found');
+      uni.showToast({ title: '请先登录', icon: 'none' });
+      return;
     }
-  });
+    
+    const { username, password } = JSON.parse(cachedUser);
+    console.log('[Schedule] username:', username, 'password length:', password?.length);
+    
+    if (!username || !password) {
+      console.log('[Schedule] Missing username or password');
+      uni.showToast({ title: '请先登录', icon: 'none' });
+      return;
+    }
+
+    // 2. 重新登录获取新cookie并获取课表
+    console.log('[Schedule] Starting syncSchedule');
+    const courses = await syncSchedule({ username, password });
+    console.log('[Schedule] syncSchedule completed, courses count:', courses?.length);
+    
+    // 3. 更新缓存
+    console.log('[Schedule] Updating courses cache');
+    scheduleStore.setCourses(courses);
+    
+    console.log('[Schedule] Updating userInfo cache');
+    const newUserInfo = {
+      studentId: username,
+      username: username,
+      password: password,
+      lastSyncAt: new Date().toISOString()
+    };
+    scheduleStore.setUserInfo(newUserInfo);
+    console.log('[Schedule] userInfo updated:', newUserInfo);
+    
+    uni.showToast({ title: '刷新成功', icon: 'success' });
+    console.log('[Schedule] Pull down refresh completed successfully');
+  } catch (error: any) {
+    console.error('[Schedule] Pull down refresh failed:', error);
+    uni.showToast({ title: error.message || '刷新失败', icon: 'none' });
+  } finally {
+    console.log('[Schedule] Stopping pull down refresh');
+    uni.stopPullDownRefresh();
+  }
 }
+
+// 页面生命周期：下拉刷新触发
+onPullDownRefresh(() => {
+  console.log('[Schedule] onPullDownRefresh triggered');
+  handlePullDownRefresh();
+});
+
 </script>
 
 <style scoped>
@@ -274,7 +320,7 @@ function handleLogout() {
 .schedule-page {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   background: #FFFFFF;
   color: #000000;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -357,16 +403,6 @@ function handleLogout() {
   justify-content: center;
   background: #F5F5F5;
   border-radius: 8rpx;
-}
-
-.logout-tag {
-  background: transparent;
-}
-
-.logout-tag-text {
-  font-size: 24rpx;
-  color: #888888;
-  font-weight: 500;
 }
 
 .action-tag-text {
