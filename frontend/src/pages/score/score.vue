@@ -135,6 +135,7 @@
 import { ref, computed, onMounted } from 'vue';
 import type { Grade } from '@/types/grade';
 import { fetchGrades, getCachedGrades, cacheGrades } from '@/utils/grade';
+import { readPassword } from '@/utils/crypto';
 
 interface Semester {
   id: number;
@@ -208,7 +209,7 @@ async function loadSemesters() {
     const cachedSemesters = uni.getStorageSync('history_semesters');
     
     if (cachedSemesters && cachedSemesters.semesters) {
-      semesters.value = cachedSemesters.semesters.map(s => ({
+      semesters.value = cachedSemesters.semesters.map((s: { id: number; schoolYear: string; name: string }) => ({
         id: s.id,
         schoolYear: s.schoolYear,
         name: s.name
@@ -226,24 +227,16 @@ async function loadSemesters() {
         return;
       }
       
-      const { username, password } = JSON.parse(cachedUser);
+      const { username, password: storedPwd } = JSON.parse(cachedUser);
+      const password = readPassword(storedPwd, username);
       if (!username || !password) {
         uni.showToast({ title: '请先登录', icon: 'none' });
         loading.value = false;
         return;
       }
       
-      const { SiasCrawler } = await import('@/utils/crawler');
-      const crawler = new SiasCrawler(username, password);
-      
-      const loginOk = await crawler.login();
-      if (!loginOk) {
-        uni.showToast({ title: '登录失败', icon: 'none' });
-        loading.value = false;
-        return;
-      }
-      
-      await crawler.autoDetect();
+      const { getCrawler } = await import('@/utils/session');
+      const crawler = await getCrawler(username, password);
       
       const fetchOk = await crawler.fetchSemesters();
       if (!fetchOk) {
@@ -269,7 +262,7 @@ async function loadSemesters() {
         await loadGrades(semesters.value[0].id);
       }
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[Score] Load semesters failed:', e);
     uni.showToast({ title: '加载失败', icon: 'none' });
   } finally {
@@ -296,7 +289,8 @@ async function loadGrades(semesterId: number) {
       return;
     }
     
-    const { username, password } = JSON.parse(cachedUser);
+    const { username, password: storedPwd } = JSON.parse(cachedUser);
+    const password = readPassword(storedPwd, username);
     if (!username || !password) {
       uni.showToast({ title: '请先登录', icon: 'none' });
       loading.value = false;
@@ -307,15 +301,15 @@ async function loadGrades(semesterId: number) {
     grades.value = gradeList;
     
     cacheGrades(semesterId, gradeList);
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[Score] Load grades failed:', e);
-    uni.showToast({ title: e.message || '获取成绩失败', icon: 'none' });
+    uni.showToast({ title: e instanceof Error ? e.message : '获取成绩失败', icon: 'none' });
   } finally {
     loading.value = false;
   }
 }
 
-function onSemesterChange(e: any) {
+function onSemesterChange(e: { detail: { value: number } }) {
   const index = e.detail.value;
   semesterIndex.value = index;
   const semester = semesters.value[index];

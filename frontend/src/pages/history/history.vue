@@ -29,66 +29,11 @@
     </view>
 
     <!-- 课表内容 -->
-    <scroll-view v-else-if="courses.length > 0" class="schedule-container" scroll-y>
-      <!-- 星期标题 -->
-      <view class="schedule-header">
-        <view class="time-column header-cell"></view>
-        <view
-          v-for="day in 7"
-          :key="day"
-          class="day-column header-cell"
-        >
-          <text class="day-name">{{ getDayName(day) }}</text>
-        </view>
-      </view>
-
-      <!-- 课表网格 -->
-      <view class="schedule-body">
-        <view class="schedule-grid">
-          <!-- 时间列 -->
-          <view class="time-column">
-            <view
-              v-for="node in 13"
-              :key="node"
-              class="time-cell"
-            >
-              <text class="node-num">{{ node }}</text>
-              <text class="node-time">{{ getNodeTimeRange(node, node) }}</text>
-            </view>
-          </view>
-
-          <!-- 课程区域 -->
-          <view class="courses-area">
-            <!-- 网格背景 -->
-            <view class="grid-background">
-              <view
-                v-for="day in 7"
-                :key="day"
-                class="grid-column"
-              >
-                <view
-                  v-for="node in 13"
-                  :key="node"
-                  class="grid-cell"
-                ></view>
-              </view>
-            </view>
-
-            <!-- 课程块 -->
-            <view
-              v-for="(course, index) in displayCourses"
-              :key="index"
-              class="course-block"
-              :style="getCourseStyle(course)"
-              @click="showCourseDetail(course)"
-            >
-              <text class="course-name">{{ course.name }}</text>
-              <text class="course-room">{{ course.room }}</text>
-            </view>
-          </view>
-        </view>
-      </view>
-    </scroll-view>
+    <ScheduleGrid
+      v-else-if="courses.length > 0"
+      :courses="displayCourses"
+      @course-click="showCourseDetail"
+    />
 
     <!-- 空状态 -->
     <view v-else class="empty-state">
@@ -108,10 +53,31 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import type { Course, RenderCourse } from '@/types';
-import { getDayName, getNodeTimeRange, toRenderCourses } from '@/utils/schedule';
+import { toRenderCourses } from '@/utils/schedule';
 import { SiasCrawler } from '@/utils/crawler';
+import { readPassword } from '@/utils/crypto';
 import { useScheduleStore } from '@/stores/schedule';
 import CourseDetailModal from '@/components/CourseDetailModal.vue';
+import ScheduleGrid from '@/components/ScheduleGrid.vue';
+
+// ★ 历史页使用独立 crawler（不走共享 session），防止切学期污染课表页的 OkHttp cookie
+let _historyCrawler: SiasCrawler | null = null;
+let _historyUser = '';
+
+async function getHistoryCrawler(username: string, password: string): Promise<SiasCrawler> {
+  // 同一用户复用（同一次页面访问内不重复登录）
+  if (_historyCrawler && _historyUser === username) {
+    return _historyCrawler;
+  }
+  const crawler = new SiasCrawler(username, password);
+  const loginOk = await crawler.login();
+  if (!loginOk) throw new Error('LOGIN_FAILED');
+  const detectOk = await crawler.autoDetect();
+  if (!detectOk) throw new Error('DETECT_FAILED');
+  _historyCrawler = crawler;
+  _historyUser = username;
+  return crawler;
+}
 
 interface Semester {
   id: number;
@@ -164,11 +130,12 @@ const semesterList = computed(() => {
   }));
 });
 
-// 当前学期标签
+// 当前学期标签（必须从 semesterList 取，与 picker 的 range 一致）
 const currentSemesterLabel = computed(() => {
-  if (semesters.value.length === 0) return '';
-  const current = semesters.value[semesterIndex.value];
-  return current ? `${current.schoolYear} 学期${current.name}` : '';
+  const list = semesterList.value;
+  if (list.length === 0) return '';
+  const current = list[semesterIndex.value];
+  return current ? current.label : '';
 });
 
 const emptyMessage = computed(() => {
@@ -180,9 +147,6 @@ const displayCourses = computed(() => {
   console.log('[History] Computing displayCourses, courses count:', courses.value.length);
   return toRenderCourses(courses.value);
 });
-
-const NODE_HEIGHT = 100;
-const DAY_WIDTH = 100 / 7;
 
 async function loadSemesters() {
   loading.value = true;
@@ -197,7 +161,7 @@ async function loadSemesters() {
       
       if (cacheAge < cacheExpiry) {
         console.log('[History] Using cached semesters, age:', Math.round(cacheAge / 1000 / 60), 'minutes');
-        semesters.value = cachedSemesters.semesters.map(s => ({
+        semesters.value = cachedSemesters.semesters.map((s: { id: number; schoolYear: string; name: string }) => ({
           id: s.id,
           schoolYear: s.schoolYear,
           name: s.name,
@@ -206,12 +170,11 @@ async function loadSemesters() {
         
         if (semesters.value.length > 0) {
           semesterIndex.value = 0;
-          // 从缓存中获取当前学期ID
-          const cachedHistoryUser = uni.getStorageSync('history_user_info');
-          if (cachedHistoryUser && cachedHistoryUser.semesterId) {
-            currentSemesterId.value = cachedHistoryUser.semesterId;
+          // 从过滤后的列表取第一个学期
+          const firstItem = semesterList.value[0];
+          if (firstItem) {
+            await loadCourses(firstItem.id);
           }
-          await loadCourses(semesters.value[0].id);
         }
         loading.value = false;
         return;
@@ -229,8 +192,8 @@ async function loadSemesters() {
       return;
     }
     
-    const { username, password } = JSON.parse(cachedUser);
-    console.log('[History] username:', username, 'password length:', password?.length);
+    const { username, password: storedPwd } = JSON.parse(cachedUser);
+    const password = readPassword(storedPwd, username);
     
     if (!username || !password) {
       console.log('[History] Missing username or password');
@@ -239,25 +202,11 @@ async function loadSemesters() {
       return;
     }
 
-    const crawler = new SiasCrawler(username, password);
+    const crawler = await getHistoryCrawler(username, password);
 
-    // 登录
-    const loginOk = await crawler.login();
-    if (!loginOk) {
-      uni.showToast({ title: '登录失败', icon: 'none' });
-      return;
-    }
-
-    // 调用autoDetect，确保Cookie中有JSESSIONID
-    console.log('[History] Calling autoDetect');
-    const detectOk = await crawler.autoDetect();
-    console.log('[History] autoDetect result:', detectOk);
-    
     // 获取当前学期ID
-    if (detectOk) {
-      currentSemesterId.value = crawler.getCurrentSemesterId();
-      console.log('[History] Current semester ID:', currentSemesterId.value);
-    }
+    currentSemesterId.value = crawler.getCurrentSemesterId();
+    console.log('[History] Current semester ID:', currentSemesterId.value);
 
     // 获取学期列表
     const fetchOk = await crawler.fetchSemesters();
@@ -281,21 +230,12 @@ async function loadSemesters() {
       lastFetchTime: Date.now()
     });
 
-    // 保存用户ID和学期ID到本地缓存
-    uni.setStorageSync('history_user_info', {
-      username: username,
-      password: password,
-      userId: crawler.getUserId(),
-      semesterId: crawler.getCurrentSemesterId(),
-      lastLoginTime: Date.now()
-    });
-
-    // 默认选择第一个（最新学期）
-    if (semesters.value.length > 0) {
+    // 默认选择第一个（过滤后的最新学期）
+    if (semesterList.value.length > 0) {
       semesterIndex.value = 0;
-      await loadCourses(semesters.value[0].id);
+      await loadCourses(semesterList.value[0].id);
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[History] Load semesters failed:', e);
     uni.showToast({ title: '加载失败', icon: 'none' });
   } finally {
@@ -325,100 +265,32 @@ async function loadCourses(semesterId: number) {
       }
     }
     
-    // 步骤2: 缓存过期或不存在，检查本地缓存的用户ID
-    const cachedHistoryUser = uni.getStorageSync('history_user_info');
-    
-    // 如果有缓存且未过期（1小时），直接使用
-    if (cachedHistoryUser && cachedHistoryUser.userId && cachedHistoryUser.lastLoginTime) {
-      const cacheAge = Date.now() - cachedHistoryUser.lastLoginTime;
-      const cacheExpiry = 60 * 60 * 1000; // 1小时过期
-      
-      if (cacheAge < cacheExpiry) {
-        console.log('[History] Using cached user ID:', cachedHistoryUser.userId, 'age:', Math.round(cacheAge / 1000 / 60), 'minutes');
-        
-        // 创建爬虫实例
-        const crawler = new SiasCrawler(cachedHistoryUser.username, cachedHistoryUser.password);
-        
-        // 登录获取cookie
-        const loginOk = await crawler.login();
-        if (!loginOk) {
-          uni.showToast({ title: '登录失败', icon: 'none' });
-          loading.value = false;
-          return;
-        }
-        
-        // 直接设置用户ID和学期ID
-        crawler.setUserId(cachedHistoryUser.userId);
-        crawler.setSemester(String(semesterId));
-        
-        // 获取课表
-        const courseList = await crawler.getData();
-        courses.value = courseList;
-        
-        // 保存课表到缓存
-        uni.setStorageSync(courseCacheKey, {
-          courses: courseList,
-          lastFetchTime: Date.now()
-        });
-        
-        loading.value = false;
-        return;
-      }
-    }
-    
-    // 步骤3: 没有缓存或缓存过期，重新登录和探测
+    // 步骤2: 通过 session 复用获取课表（无需重复 login）
     const cachedUser = uni.getStorageSync('userInfo');
     if (!cachedUser) {
       uni.showToast({ title: '请先登录', icon: 'none' });
       loading.value = false;
       return;
     }
-    
-    const { username, password } = JSON.parse(cachedUser);
+
+    const { username, password: storedPwd } = JSON.parse(cachedUser);
+    const password = readPassword(storedPwd, username);
     if (!username || !password) {
       uni.showToast({ title: '请先登录', icon: 'none' });
       loading.value = false;
       return;
     }
 
-    const crawler = new SiasCrawler(username, password);
-
-    // 登录
-    const loginOk = await crawler.login();
-    if (!loginOk) {
-      uni.showToast({ title: '登录失败', icon: 'none' });
-      return;
-    }
-
-    // 探测用户ID
-    const detectOk = await crawler.autoDetect();
-    if (!detectOk) {
-      uni.showToast({ title: '获取用户信息失败', icon: 'none' });
-      return;
-    }
-
-    // 切换到指定学期
-    crawler.setSemester(String(semesterId));
-
-    // 获取课表
-    const courseList = await crawler.getData();
+    const crawler = await getHistoryCrawler(username, password);
+    const courseList = await crawler.getData(String(semesterId));
     courses.value = courseList;
-    
+
     // 保存课表到缓存
     uni.setStorageSync(courseCacheKey, {
       courses: courseList,
       lastFetchTime: Date.now()
     });
-    
-    // 更新用户信息缓存
-    uni.setStorageSync('history_user_info', {
-      username: username,
-      password: password,
-      userId: crawler.getUserId(),
-      semesterId: crawler.getCurrentSemesterId(),
-      lastLoginTime: Date.now()
-    });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[History] Load courses failed:', e);
     uni.showToast({ title: '获取课表失败', icon: 'none' });
   } finally {
@@ -426,34 +298,19 @@ async function loadCourses(semesterId: number) {
   }
 }
 
-function onSemesterChange(e: any) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- uni-app picker event
+function onSemesterChange(e: { detail: { value: number } }) {
   const index = e.detail.value;
   semesterIndex.value = index;
-  const semester = semesters.value[index];
-  if (semester) {
-    loadCourses(semester.id);
+  // 必须从 semesterList（过滤后）取 id，与 picker 的 range 一致
+  const item = semesterList.value[index];
+  if (item) {
+    loadCourses(item.id);
   }
 }
 
 function goBack() {
   uni.navigateBack();
-}
-
-function getCourseStyle(course: RenderCourse) {
-  const day = parseInt(course.day);
-  const left = (day - 1) * DAY_WIDTH;
-  const top = (course.startNode - 1) * NODE_HEIGHT;
-  const height = course.step * NODE_HEIGHT;
-
-  return {
-    left: `${left}%`,
-    top: `${top}rpx`,
-    width: `${DAY_WIDTH}%`,
-    height: `${height}rpx`,
-    backgroundColor: course.color,
-    borderRadius: '8rpx',
-    border: '1rpx solid rgba(0,0,0,0.02)'
-  };
 }
 
 function showCourseDetail(course: RenderCourse) {
@@ -568,134 +425,6 @@ function closeDetail() {
 .loading-text {
   font-size: 26rpx;
   color: #888888;
-}
-
-/* 课表内容 */
-.schedule-container {
-  flex: 1;
-  overflow: hidden;
-}
-
-.schedule-header {
-  display: flex;
-  background: #FFFFFF;
-  border-bottom: 1rpx solid #EAEAEA;
-  padding: 12rpx 0;
-}
-
-.header-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 76rpx;
-}
-
-.time-column {
-  width: 100rpx;
-  flex-shrink: 0;
-}
-
-.day-column {
-  flex: 1;
-}
-
-.day-name {
-  font-size: 24rpx;
-  color: #888888;
-  font-weight: 500;
-}
-
-.schedule-body {
-  flex: 1;
-}
-
-.schedule-grid {
-  display: flex;
-  position: relative;
-}
-
-.time-column .time-cell {
-  height: 100rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border-bottom: 1rpx solid #F5F5F5;
-  background: #FFFFFF;
-}
-
-.node-num {
-  font-size: 22rpx;
-  color: #888888;
-  font-weight: 600;
-}
-
-.node-time {
-  font-size: 16rpx;
-  color: #BBBBBB;
-  margin-top: 4rpx;
-}
-
-.courses-area {
-  flex: 1;
-  position: relative;
-  height: 1300rpx;
-}
-
-.grid-background {
-  display: flex;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-}
-
-.grid-column {
-  flex: 1;
-  border-left: 1rpx solid #F5F5F5;
-  background: #FFFFFF;
-}
-
-.grid-cell {
-  height: 100rpx;
-  border-bottom: 1rpx solid #F5F5F5;
-}
-
-.course-block {
-  position: absolute;
-  padding: 8rpx;
-  box-sizing: border-box;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  margin: 2rpx;
-  text-align: center;
-}
-
-.course-name {
-  font-size: 22rpx;
-  font-weight: 600;
-  color: #000000;
-  line-height: 1.25;
-  word-break: break-all;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-}
-
-.course-room {
-  font-size: 18rpx;
-  color: rgba(0, 0, 0, 0.6);
-  margin-top: 6rpx;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 90%;
 }
 
 /* 空状态 */

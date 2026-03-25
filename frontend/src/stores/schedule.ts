@@ -77,6 +77,8 @@ export const useScheduleStore = defineStore('schedule', () => {
       }
       // 加载完缓存（尤其是开学日期）后，自动初始化当前周数
       initCurrentWeek();
+      // 加载提醒设置
+      loadReminderSettings();
     } catch (e) {
       console.error('加载缓存失败', e);
     }
@@ -84,12 +86,13 @@ export const useScheduleStore = defineStore('schedule', () => {
 
   // 清除所有数据（含学期设置），用于退出登录
   function clearData() {
+    // 重置内存状态
     courses.value = [];
     userInfo.value = null;
     semesterStart.value = SCHEDULE_CONFIG.DEFAULT_SEMESTER_START;
-    uni.removeStorageSync('courses');
-    uni.removeStorageSync('userInfo');
-    uni.removeStorageSync('semesterStart');
+    reminderSettings.value = DEFAULT_REMINDER_SETTINGS;
+    // 清除所有本地存储（包括动态 key 如 grades_xxx、history_courses_xxx 等）
+    uni.clearStorageSync();
   }
 
   // 仅清除账号相关数据，保留用户设定的学期开始日期（切换账号/重新登录时用）

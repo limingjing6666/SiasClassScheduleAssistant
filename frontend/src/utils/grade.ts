@@ -4,7 +4,7 @@
  */
 
 import type { Grade, GradeCache } from '@/types/grade';
-import { SiasCrawler } from './crawler';
+import { getCrawler } from './session';
 
 // 缓存键前缀
 const CACHE_KEY_PREFIX = 'grades_';
@@ -49,8 +49,6 @@ export function parseGrades(html: string): Grade[] {
   const headers = theadMatch[1].match(/<th[^>]*>([\s\S]*?)<\/th>/g);
   const headerTexts = headers ? headers.map(h => h.replace(/<[^>]*>/g, '').trim()) : [];
   
-  console.log('[parseGrades] Headers:', headerTexts);
-  console.log('[parseGrades] Headers count:', headerTexts.length);
   
   // 字段映射
   const fieldMap: { [key: string]: string } = {
@@ -79,7 +77,6 @@ export function parseGrades(html: string): Grade[] {
     }
   }
   
-  console.log('[parseGrades] Field indices:', fieldIndices);
   
   // 定位表格体
   const tbodyMatch = tableMatch[1].match(/<tbody[^>]*id="grid[^"]*_data"[^>]*>([\s\S]*?)<\/tbody>/);
@@ -106,10 +103,6 @@ export function parseGrades(html: string): Grade[] {
     // 提取单元格
     const cells = row.match(/<td[^>]*>([\s\S]*?)<\/td>/g);
     
-    // 添加调试日志
-    console.log('[parseGrades] Row preview:', row.substring(0, 200));
-    console.log('[parseGrades] Cells found:', cells?.length);
-    
     // 检查单元格数量
     if (!cells || cells.length < 10) {
       console.log('[parseGrades] Invalid row, cells count:', cells?.length);
@@ -119,8 +112,6 @@ export function parseGrades(html: string): Grade[] {
     // 清理单元格内容，允许空单元格
     const values = cells.map(cell => cleanCell(cell) || '');
     
-    // 添加调试日志
-    console.log('[parseGrades] Values:', values);
     
     // 根据字段索引动态构建成绩对象
     const grade: Grade = {
@@ -141,17 +132,18 @@ export function parseGrades(html: string): Grade[] {
     };
     
     // 根据字段索引填充数据
+    const gradeRecord = grade as unknown as Record<string, string | number | null>;
     for (const fieldName in fieldIndices) {
       const index = fieldIndices[fieldName];
       if (index < values.length) {
         const value = values[index];
         if (value) {
           if (fieldName === 'credit') {
-            grade[fieldName] = parseFloatOrNull(value) || 0;
+            gradeRecord[fieldName] = parseFloatOrNull(value) || 0;
           } else if (['dailyScore', 'midtermScore', 'finalScore', 'labScore', 'totalScore', 'gpa'].includes(fieldName)) {
-            (grade as any)[fieldName] = parseFloatOrNull(value);
+            gradeRecord[fieldName] = parseFloatOrNull(value);
           } else {
-            (grade as any)[fieldName] = value;
+            gradeRecord[fieldName] = value;
           }
         }
       }
@@ -160,7 +152,7 @@ export function parseGrades(html: string): Grade[] {
     grades.push(grade);
   }
   
-  console.log('[parseGrades] Parsed grades count:', grades.length);
+  console.log('[parseGrades] Parsed:', grades.length);
   return grades;
 }
 
@@ -172,76 +164,19 @@ export function parseGrades(html: string): Grade[] {
  * @returns 成绩列表
  */
 export async function fetchGrades(username: string, password: string, semesterId: number): Promise<Grade[]> {
-  console.log('[fetchGrades] Fetching grades for semester:', semesterId);
-  console.log('[fetchGrades] Querying semester ID:', semesterId);
-  
-  // 创建爬虫实例
-  const crawler = new SiasCrawler(username, password);
-  
-  // 登录
-  const loginOk = await crawler.login();
-  if (!loginOk) {
-    throw new Error('LOGIN_FAILED');
-  }
-  
-  // 防限流
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  
-  // 请求成绩
-  const baseUrl = 'https://jwxt.sias.edu.cn/eams';
-  const url = `${baseUrl}/teach/grade/course/person!search.action`;
-  
-  const formData = {
-    semesterId: String(semesterId),
-    projectType: '',
-    _: String(Date.now())
-  };
-  
-  // 编码表单数据
-  const encodedData = Object.entries(formData)
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-    .join('&');
-  
-  console.log('[fetchGrades] Request URL:', url);
-  console.log('[fetchGrades] Request data:', encodedData);
-  
+
   try {
-    // 使用uni.request发送请求
-    const response = await new Promise<string>((resolve, reject) => {
-      uni.request({
-        url: url,
-        method: 'POST',
-        header: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'X-Requested-With': 'XMLHttpRequest',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        },
-        data: encodedData,
-        timeout: 15000,
-        success: (res) => {
-          resolve(typeof res.data === 'string' ? res.data : JSON.stringify(res.data));
-        },
-        fail: (err) => {
-          reject(new Error('NETWORK_ERROR'));
-        }
-      });
-    });
-    
-    // 添加响应日志
-    console.log('[fetchGrades] Response length:', response.length);
-    console.log('[fetchGrades] Response preview:', response.substring(0, 500));
-    
-    // 检查是否限流
-    if (response.includes('请不要过快点击')) {
-      throw new Error('RATE_LIMITED');
+    const crawler = await getCrawler(username, password);
+    const html = await crawler.fetchGradeHtml(semesterId);
+    return parseGrades(html);
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message === 'SESSION_EXPIRED') {
+      console.log('[fetchGrades] Session expired, retrying...');
+      const crawler = await getCrawler(username, password);
+      const html = await crawler.fetchGradeHtml(semesterId);
+      return parseGrades(html);
     }
-    
-    // 解析成绩
-    const grades = parseGrades(response);
-    return grades;
-  } catch (error: any) {
-    console.error('[fetchGrades] Error:', error.message);
-    throw error;
+    throw e;
   }
 }
 
@@ -264,11 +199,8 @@ export function getCachedGrades(semesterId: number): Grade[] | null {
     const cacheExpiry = 24 * 60 * 60 * 1000; // 24小时过期
     
     if (cacheAge < cacheExpiry) {
-      console.log('[getCachedGrades] Using cached grades for semester:', semesterId);
       return data.grades;
     }
-    
-    console.log('[getCachedGrades] Cache expired for semester:', semesterId);
     return null;
   } catch {
     return null;
@@ -288,7 +220,6 @@ export function cacheGrades(semesterId: number, grades: Grade[]): void {
   };
   
   uni.setStorageSync(cacheKey, JSON.stringify(data));
-  console.log('[cacheGrades] Cached grades for semester:', semesterId);
 }
 
 /**
@@ -305,7 +236,6 @@ export function clearAllGradesCache(): void {
       }
     }
     
-    console.log('[clearAllGradesCache] Cleared all grades cache');
   } catch {
     // 忽略错误
   }

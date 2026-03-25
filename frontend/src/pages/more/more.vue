@@ -14,6 +14,22 @@
         <text class="menu-arrow">›</text>
       </view>
 
+      <view class="menu-item" @click="goToGradeAvg">
+        <view class="menu-left">
+          <text class="menu-icon">📊</text>
+          <text class="menu-text">平均成绩</text>
+        </view>
+        <text class="menu-arrow">›</text>
+      </view>
+
+      <view class="menu-item" @click="goToReminder">
+        <view class="menu-left">
+          <text class="menu-icon">🔔</text>
+          <text class="menu-text">课前提醒</text>
+        </view>
+        <text class="menu-arrow">›</text>
+      </view>
+
       <view class="menu-item logout" @click="handleLogout">
         <view class="menu-left">
           <text class="menu-icon">🚪</text>
@@ -24,19 +40,51 @@
 
     <!-- 版本信息 -->
     <view class="version-info">
-      <text class="version-text">西亚斯课表 v1.0.16</text>
+      <text class="version-text">西亚斯课表 v{{ appVersion }}</text>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted } from 'vue';
 import { useScheduleStore } from '@/stores/schedule';
+import { clearSession } from '@/utils/session';
 
 const scheduleStore = useScheduleStore();
+
+const appVersion = ref('');
+onMounted(() => {
+  // #ifdef APP-PLUS
+  try {
+    const appid = plus.runtime.appid || '';
+    plus.runtime.getProperty(appid, (info) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 5+ API 类型定义不含 versionName 但运行时存在
+      appVersion.value = (info as Record<string, string>).versionName || '1.0.17';
+    });
+  } catch {
+    appVersion.value = '1.0.17';
+  }
+  // #endif
+  // #ifndef APP-PLUS
+  appVersion.value = '1.0.17';
+  // #endif
+});
 
 function goToHistory() {
   uni.navigateTo({
     url: '/pages/history/history'
+  });
+}
+
+function goToGradeAvg() {
+  uni.navigateTo({
+    url: '/pages/gradeAvg/gradeAvg'
+  });
+}
+
+function goToReminder() {
+  uni.navigateTo({
+    url: '/pages/reminder/reminder'
   });
 }
 
@@ -46,6 +94,7 @@ function handleLogout() {
     content: '确定要退出吗？',
     success: (res) => {
       if (res.confirm) {
+        clearSession();
         scheduleStore.clearData();
         setTimeout(() => {
           uni.reLaunch({

@@ -81,6 +81,7 @@
 import { ref } from 'vue';
 import { syncSchedule } from '@/api/schedule';
 import { useScheduleStore } from '@/stores/schedule';
+import { encryptPassword } from '@/utils/crypto';
 
 const username = ref('');
 const password = ref('');
@@ -112,7 +113,7 @@ async function handleLogin() {
     scheduleStore.setUserInfo({
       studentId: username.value.trim(),
       username: username.value.trim(),
-      password: password.value,
+      password: encryptPassword(password.value, username.value.trim()),
       lastSyncAt: new Date().toISOString()
     });
 
@@ -122,8 +123,8 @@ async function handleLogin() {
       });
     }, 500);
 
-  } catch (error: any) {
-    errorMessage.value = error.message || '同步失败，请检查网络或密码';
+  } catch (error: unknown) {
+    errorMessage.value = error instanceof Error ? error.message : '同步失败，请检查网络或密码';
   } finally {
     loading.value = false;
   }

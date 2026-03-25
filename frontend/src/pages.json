@@ -59,6 +59,32 @@
       }
     },
     {
+      "path": "pages/gradeAvg/gradeAvg",
+      "style": {
+        "navigationBarTitleText": "平均成绩",
+        "navigationStyle": "custom",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "app-plus": {
+          "statusBar": {
+            "style": "dark"
+          }
+        }
+      }
+    },
+    {
+      "path": "pages/reminder/reminder",
+      "style": {
+        "navigationBarTitleText": "课前提醒",
+        "navigationStyle": "custom",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "app-plus": {
+          "statusBar": {
+            "style": "dark"
+          }
+        }
+      }
+    },
+    {
       "path": "pages/history/history",
       "style": {
         "navigationBarTitleText": "历史课表",

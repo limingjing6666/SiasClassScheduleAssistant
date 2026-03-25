@@ -30,23 +30,9 @@
       </view>
     </view>
 
-    <view class="schedule-header">
-      <view class="time-column header-cell">
-        <text class="header-time-text"></text>
-      </view>
-      <view
-        v-for="day in 7"
-        :key="day"
-        class="day-column header-cell"
-        :class="{ 'today-header': isToday(day) }"
-      >
-        <text class="day-name" :class="{ 'today-text': isToday(day) }">{{ getDayName(day) }}</text>
-        <text class="day-date" :class="{ 'today-text': isToday(day) }">{{ getDateOfDay(day) }}</text>
-      </view>
-    </view>
-
-    <scroll-view class="schedule-body" scroll-y :show-scrollbar="false">
-      <view v-if="scheduleStore.loading" class="schedule-grid skeleton-grid">
+    <!-- 骨架屏加载状态 -->
+    <view v-if="scheduleStore.loading" class="skeleton-container">
+      <view class="schedule-grid skeleton-grid">
         <view class="time-column">
           <view v-for="n in 12" :key="n" class="time-cell skeleton-item" style="margin: 4rpx; height: 92rpx;"></view>
         </view>
@@ -58,48 +44,18 @@
           </view>
         </view>
       </view>
+    </view>
 
-      <view v-else class="schedule-grid">
-        <view class="time-column">
-          <view
-            v-for="node in 13"
-            :key="node"
-            class="time-cell"
-          >
-            <text class="node-num">{{ node }}</text>
-            <text class="node-time">{{ getNodeTimeRange(node, node) }}</text>
-          </view>
-        </view>
-
-        <view class="courses-area">
-          <view class="grid-background">
-            <view
-              v-for="day in 7"
-              :key="day"
-              class="grid-column"
-              :class="{ 'today-column': isToday(day) }"
-            >
-              <view
-                v-for="node in 13"
-                :key="node"
-                class="grid-cell"
-              ></view>
-            </view>
-          </view>
-
-          <view
-            v-for="(course, index) in displayCourses"
-            :key="index"
-            class="course-block"
-            :style="getCourseStyle(course)"
-            @click="showCourseDetail(course)"
-          >
-            <text class="course-name">{{ course.name }}</text>
-            <text class="course-room">{{ course.room }}</text>
-          </view>
-        </view>
-      </view>
-    </scroll-view>
+    <!-- 课表网格 -->
+    <ScheduleGrid
+      v-else
+      :courses="displayCourses"
+      highlight-today
+      show-dates
+      :semester-start="semesterStart"
+      :current-week="currentWeek"
+      @course-click="showCourseDetail"
+    />
 
     <CourseDetailModal
       v-if="showDetail && selectedCourse"
@@ -119,13 +75,14 @@
 import { ref, computed, onMounted } from 'vue';
 import { onPullDownRefresh } from '@dcloudio/uni-app';
 import { useScheduleStore } from '@/stores/schedule';
-import { getDayName, getNodeTimeRange } from '@/utils/schedule';
 import { syncSchedule } from '@/api/schedule';
+import { readPassword, encryptPassword } from '@/utils/crypto';
 import type { RenderCourse } from '@/types';
 
 import WeekSelector from '@/components/WeekSelector.vue';
 import CourseDetailModal from '@/components/CourseDetailModal.vue';
 import CustomCalendar from '@/components/CustomCalendar.vue';
+import ScheduleGrid from '@/components/ScheduleGrid.vue';
 
 const scheduleStore = useScheduleStore();
 
@@ -155,9 +112,6 @@ function formatSyncTime(isoString: string): string {
   const min = String(d.getMinutes()).padStart(2, '0');
   return `${m}/${day} ${h}:${min}`;
 }
-
-const NODE_HEIGHT = 100;
-const DAY_WIDTH = 100 / 7;
 
 onMounted(() => {
   if (!scheduleStore.userInfo || scheduleStore.courses.length === 0) {
@@ -209,40 +163,6 @@ function goToCurrentWeek() {
   }
 }
 
-function isToday(day: number): boolean {
-  const today = new Date().getDay();
-  const adjustedToday = today === 0 ? 7 : today;
-  return adjustedToday === day;
-}
-
-function getDateOfDay(day: number): string {
-  const start = new Date(semesterStart.value);
-  const daysFromStart = (currentWeek.value - 1) * 7 + (day - 1);
-  const targetDate = new Date(start);
-  targetDate.setDate(start.getDate() + daysFromStart);
-  
-  const month = targetDate.getMonth() + 1;
-  const date = targetDate.getDate();
-  return `${month}/${date}`;
-}
-
-function getCourseStyle(course: RenderCourse) {
-  const day = parseInt(course.day);
-  const left = (day - 1) * DAY_WIDTH;
-  const top = (course.startNode - 1) * NODE_HEIGHT;
-  const height = course.step * NODE_HEIGHT;
-
-  return {
-    left: `${left}%`,
-    top: `${top}rpx`,
-    width: `${DAY_WIDTH}%`,
-    height: `${height}rpx`,
-    backgroundColor: course.color,
-    borderRadius: '8rpx',
-    border: '1rpx solid rgba(0,0,0,0.02)'
-  };
-}
-
 function showCourseDetail(course: RenderCourse) {
   selectedCourse.value = course;
   showDetail.value = true;
@@ -268,8 +188,8 @@ async function handlePullDownRefresh() {
       return;
     }
     
-    const { username, password } = JSON.parse(cachedUser);
-    console.log('[Schedule] username:', username, 'password length:', password?.length);
+    const { username, password: storedPwd } = JSON.parse(cachedUser);
+    const password = readPassword(storedPwd, username);
     
     if (!username || !password) {
       console.log('[Schedule] Missing username or password');
@@ -290,7 +210,7 @@ async function handlePullDownRefresh() {
     const newUserInfo = {
       studentId: username,
       username: username,
-      password: password,
+      password: encryptPassword(password, username),
       lastSyncAt: new Date().toISOString()
     };
     scheduleStore.setUserInfo(newUserInfo);
@@ -298,9 +218,9 @@ async function handlePullDownRefresh() {
     
     uni.showToast({ title: '刷新成功', icon: 'success' });
     console.log('[Schedule] Pull down refresh completed successfully');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Schedule] Pull down refresh failed:', error);
-    uni.showToast({ title: error.message || '刷新失败', icon: 'none' });
+    uni.showToast({ title: error instanceof Error ? error.message : '刷新失败', icon: 'none' });
   } finally {
     console.log('[Schedule] Stopping pull down refresh');
     uni.stopPullDownRefresh();
@@ -411,67 +331,8 @@ onPullDownRefresh(() => {
   font-weight: 600;
 }
 
-.schedule-header {
-  display: flex;
-  background: #FFFFFF;
-  border-bottom: 1rpx solid #EAEAEA;
-  padding: 12rpx 0;
-}
-
-.header-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 76rpx;
-}
-
-.today-header {
-  position: relative;
-}
-
-.today-header::after {
-  content: '';
-  position: absolute;
-  bottom: -12rpx;
-  left: 25%;
-  right: 25%;
-  height: 6rpx;
-  background: #000000;
-  border-radius: 4rpx;
-}
-
-.time-column {
-  width: 100rpx;
-  flex-shrink: 0;
-}
-
-.day-column {
-  flex: 1;
-}
-
-.day-name {
-  font-size: 24rpx;
-  color: #888888;
-  font-weight: 500;
-}
-
-.day-name.today-text {
-  color: #000000;
-  font-weight: 700;
-}
-
-.day-date {
-  font-size: 18rpx;
-  color: #BBBBBB;
-  margin-top: 4rpx;
-}
-
-.day-date.today-text {
-  color: #000000;
-}
-
-.schedule-body {
+/* 骨架屏（仅 schedule 页使用） */
+.skeleton-container {
   flex: 1;
   overflow: hidden;
 }
@@ -481,90 +342,17 @@ onPullDownRefresh(() => {
   position: relative;
 }
 
-.time-column .time-cell {
-  height: 100rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border-bottom: 1rpx solid #F5F5F5;
-  background: #FFFFFF;
-}
-
-.node-num {
-  font-size: 22rpx;
-  color: #888888;
-  font-weight: 600;
-}
-
-.node-time {
-  font-size: 16rpx;
-  color: #BBBBBB;
-  margin-top: 4rpx;
+.time-column {
+  width: 100rpx;
+  flex-shrink: 0;
 }
 
 .courses-area {
   flex: 1;
   position: relative;
-  height: 1300rpx;
-}
-
-.grid-background {
-  display: flex;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
 }
 
 .grid-column {
   flex: 1;
-  border-left: 1rpx solid #F5F5F5;
-  background: #FFFFFF;
-}
-
-.grid-column.today-column {
-  background: #FAFAFA;
-}
-
-.grid-cell {
-  height: 100rpx;
-  border-bottom: 1rpx solid #F5F5F5;
-}
-
-.course-block {
-  position: absolute;
-  padding: 8rpx;
-  box-sizing: border-box;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  margin: 2rpx;
-  text-align: center;
-}
-
-.course-name {
-  font-size: 22rpx;
-  font-weight: 600;
-  color: #000000;
-  line-height: 1.25;
-  word-break: break-all;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-}
-
-.course-room {
-  font-size: 18rpx;
-  color: rgba(0, 0, 0, 0.6);
-  margin-top: 6rpx;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 90%;
 }
 </style>

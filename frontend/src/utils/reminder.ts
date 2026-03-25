@@ -3,7 +3,8 @@
  * 使用系统级定时通知，即使应用关闭也能触发
  */
 
-import type { Course, ReminderSettings, ReminderTask } from '@/types/reminder';
+import type { Course } from '@/types';
+import type { ReminderSettings, ReminderTask } from '@/types/reminder';
 import { NODE_TIMES } from '@/utils/schedule';
 import { DEFAULT_REMINDER_SETTINGS, REMINDER_CACHE_KEY, NOTIFICATION_IDS_KEY } from '@/config/reminder';
 
@@ -121,15 +122,10 @@ export function isTaskPassed(task: ReminderTask): boolean {
 export function clearAllNotifications(): void {
   // #ifdef APP-PLUS
   try {
-    const idsStr = uni.getStorageSync(NOTIFICATION_IDS_KEY) || '[]';
-    const ids: string[] = JSON.parse(idsStr);
-
-    for (const id of ids) {
-      plus.push.cancel(id);
-    }
-
+    // plus.push.clear() 清除所有本地推送通知（5+ API 无按 ID 取消的方法）
+    plus.push.clear();
     uni.removeStorageSync(NOTIFICATION_IDS_KEY);
-    console.log('[Reminder] 清除所有通知，共', ids.length, '个');
+    console.log('[Reminder] 已清除所有通知');
   } catch {
     // 忽略错误
   }
@@ -167,7 +163,11 @@ export function scheduleNotification(task: ReminderTask): boolean {
 
   const content = `📚 即将上课：${task.courseName}\n⏰ ${task.startTime}-${task.endTime}\n📍 ${task.room}\n👨‍🏫 ${task.teacher}`;
 
-  const options: any = {
+  // 生成唯一通知 ID，便于追踪
+  const notifyId = `reminder_${task.courseId}_${Date.now()}`;
+
+  const options: Record<string, string | number | boolean> = {
+    id: notifyId,
     title: '课前提醒',
     delay: Math.floor(delay / 1000),  // 延迟秒数
   };
@@ -180,16 +180,16 @@ export function scheduleNotification(task: ReminderTask): boolean {
     options.vibrate = true;
   }
 
-  const id = plus.push.createMessage(content, { courseId: task.courseId }, options);
-
-  if (id) {
-    saveNotificationId(id);
-    console.log(`[Reminder] 创建定时通知: ${task.courseName}，${Math.floor(delay / 60000)}分钟后触发`);
-    return true;
-  }
+  // plus.push.createMessage 返回 void，不依赖返回值
+  plus.push.createMessage(content, JSON.stringify({ courseId: task.courseId }), options);
+  saveNotificationId(notifyId);
+  console.log(`[Reminder] 创建定时通知: ${task.courseName}，${Math.floor(delay / 60000)}分钟后触发`);
+  return true;
   // #endif
 
+  // #ifndef APP-PLUS
   return false;
+  // #endif
 }
 
 /**

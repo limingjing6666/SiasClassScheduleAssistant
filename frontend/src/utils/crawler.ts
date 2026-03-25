@@ -261,9 +261,9 @@ export class SiasCrawler {
           timeout: 5000
         });
         console.log('[login] Pre-logout completed');
-      } catch (e: any) {
+      } catch (e: unknown) {
         // 如果是网络连接超时/不可达，不仅是登出会失败，后续也必败。应该尽早抛出并交由外层处理为 NETWORK_ERROR
-        if (e?.message === 'NETWORK_ERROR') throw e;
+        if (e instanceof Error && e.message === 'NETWORK_ERROR') throw e;
         // 忽略其他报错（可能本来就没有 session 等软错误）
         console.log('[login] Pre-logout failed (ignored)');
       }
@@ -286,8 +286,8 @@ export class SiasCrawler {
       const salt = saltMatch[1];
       const encPwd = CryptoJS.SHA1(salt + this.password).toString();
 
-      // ★ 防限流：GET 取盐后等一下再 POST
-      await sleep(1500);
+      // ★ 防限流：GET 取盐后等一下再 POST（requestWithRetry 兜底）
+      await sleep(300);
 
       // 2. POST /loginExt.action
       const formData: Record<string, string> = {
@@ -310,9 +310,6 @@ export class SiasCrawler {
       // 3. 验证登录状态
       const text = loginRes.text;
       const hasSalt = !!text.match(/CryptoJS\.SHA1\('/);
-      console.log('[login] POST len:', text.length, 'hasSalt:', hasSalt);
-      console.log('[login] Cookie after login:', this.cookieJar.toString());
-
       if (isRateLimited(text)) {
         console.log('[login] ✗ Rate limited even after retries');
         return false;
@@ -323,192 +320,196 @@ export class SiasCrawler {
       }
       console.log('[login] ✓ Login success');
       return true;
-    } catch (e: any) {
-      if (e?.message === 'NETWORK_ERROR') throw e;
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message === 'NETWORK_ERROR') throw e;
       console.error('[login] Exception:', e instanceof Error ? e.message : e);
       return false;
     }
   }
 
   // ----------------------------------------------------------
-  // autoDetect()  —— 对应 Python crawler.auto_detect()
+  // autoDetect()  —— 直达 innerIndex，精确正则提取 ids + semester.id
   // ----------------------------------------------------------
   async autoDetect(): Promise<boolean> {
     try {
-      // ★ 防限流：login 完成后等一下再开始探测
-      await sleep(1500);
+      // ★ 防限流：login 完成后等一下再开始探测（requestWithRetry 兜底）
+      await sleep(500);
 
-      // 1. 访问课表外壳页
-      const urlShell = `${this.baseUrl}/courseTableForStd.action`;
-      const headersShell = {
-        ...this.headers,
-        'Referer': `${this.baseUrl}/homeExt.action`
-      };
+      // ★ 一步到位：直接请求 innerIndex（跳过外壳页）
+      // 实测验证：直接请求与先走外壳页结果完全一致
+      const html = await this.fetchInnerIndex(1);
+      this.extractIds(html);
+      this.extractSemesterId(html);
 
-      console.log('[autoDetect] Step1: GET courseTableForStd');
-      const resShell = await requestWithRetry(urlShell, {
-        method: 'GET',
-        header: headersShell,
-        cookieJar: this.cookieJar,
-        timeout: 10000
-      });
-      console.log('[autoDetect] Shell len:', resShell.text.length, 'rateLimited:', isRateLimited(resShell.text));
-      // ★ 诊断：打印 HTML 片段，看服务器返回的是什么页面
-      console.log('[autoDetect] Shell HTML preview:', resShell.text.substring(0, 500));
-
-      // 2. 提取跳转链接 bg.Go(...)
-      const match = resShell.text.match(/bg\.Go\('([^']+)'/);
-      console.log('[autoDetect] bg.Go match:', match ? match[1] : 'NOT FOUND');
-
-      // ★ 备选：也试 semester.id、ids 等直接从 shell 页面提取
-      this.scanHtmlForInfo(resShell.text);
-      console.log('[autoDetect] After shell scan → userId:', this.userId, 'semesterId:', this.currentSemesterId);
-
-      if (match) {
-        let innerUrl = match[1];
-        if (innerUrl.startsWith('/eams')) {
-          innerUrl = ORIGIN_URL + innerUrl;
-        } else {
-          innerUrl = `${this.baseUrl}/${innerUrl}`;
-        }
-
-        await sleep(1000);
-
-        // 3. 访问内部页
-        console.log('[autoDetect] Step2: GET inner page', innerUrl);
-        const headInner = {
-          ...this.headers,
-          'X-Requested-With': 'XMLHttpRequest',
-          'Referer': urlShell
-        };
-        const resInner = await requestWithRetry(innerUrl, {
-          method: 'GET',
-          header: headInner,
-          cookieJar: this.cookieJar,
-          timeout: 10000
-        });
-        console.log('[autoDetect] Inner len:', resInner.text.length);
-
-        // 4. 提取信息 (ID 和 学期)
-        this.scanHtmlForInfo(resInner.text);
-        console.log('[autoDetect] After scan → userId:', this.userId, 'semesterId:', this.currentSemesterId);
-      }
-
-      // 5. 如果未找到，尝试学籍页
+      // ★ 降级路径：projectId=1 失败时尝试 projectId=62（实验班等特殊项目）
       if (!this.userId) {
-        await sleep(1500);
-
-        const urlDetail = `${this.baseUrl}/stdDetail.action`;
-        console.log('[autoDetect] Step3: fallback GET stdDetail');
-        const resDetail = await requestWithRetry(urlDetail, {
-          method: 'GET',
-          header: { ...this.headers },
-          cookieJar: this.cookieJar,
-          timeout: 10000
-        });
-        console.log('[autoDetect] Detail len:', resDetail.text.length);
-
-        const matchDetail = resDetail.text.match(/bg\.Go\('([^']+)'/);
-        console.log('[autoDetect] Detail bg.Go match:', matchDetail ? matchDetail[1] : 'NOT FOUND');
-
-        if (matchDetail) {
-          let innerDetail = matchDetail[1];
-          if (innerDetail.startsWith('/eams')) {
-            innerDetail = ORIGIN_URL + innerDetail;
-          } else {
-            innerDetail = `${this.baseUrl}/${innerDetail}`;
-          }
-
-          await sleep(1000);
-
-          console.log('[autoDetect] Step4: GET detail inner', innerDetail);
-          const headInner = {
-            ...this.headers,
-            'X-Requested-With': 'XMLHttpRequest'
-          };
-          const resInnerDetail = await requestWithRetry(innerDetail, {
-            method: 'GET',
-            header: headInner,
-            cookieJar: this.cookieJar,
-            timeout: 10000
-          });
-
-          this.scanHtmlForInfo(resInnerDetail.text);
-          console.log('[autoDetect] After detail scan → userId:', this.userId, 'semesterId:', this.currentSemesterId);
+        console.log('[autoDetect] projectId=1 failed, trying projectId=62');
+        await sleep(1000);
+        const html62 = await this.fetchInnerIndex(62);
+        this.extractIds(html62);
+        if (!this.currentSemesterId) {
+          this.extractSemesterId(html62);
         }
       }
+
+      // ★ 校正：服务端会按学号记住最后查看的学期（数据库级），
+      //   历史查询后再登录会拿到旧学期。通过日期推算覆盖。
+      await this.correctCurrentSemester();
 
       console.log('[autoDetect] Final → userId:', this.userId, 'semesterId:', this.currentSemesterId);
-      return this.userId !== null;
-    } catch (e: any) {
-      if (e?.message === 'NETWORK_ERROR') throw e;
+      return this.userId !== null && this.currentSemesterId !== null;
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message === 'NETWORK_ERROR') throw e;
       console.error('[autoDetect] Exception:', e instanceof Error ? e.message : e);
       return false;
     }
   }
 
-  // ----------------------------------------------------------
-  // scanHtmlForInfo()  —— 对应 Python crawler.scan_html_for_info()
-  // ----------------------------------------------------------
-  private scanHtmlForInfo(html: string): void {
-    // 1. 扫描用户 ID
-    // 对应 Python 完全相同的 5 个正则 pattern
-    if (!this.userId) {
-      const patterns: RegExp[] = [
-        /name="ids"\s+value="(\d+)"/,
-        /ids=(\d+)/,
-        /bg\.form\.addInput\(form,\s*"ids",\s*"(\d+)"\)/,
-        /value="(\d+)"\s+name="ids"/,
-        /name="student\.id"\s+value="(\d+)"/
-      ];
-      for (const p of patterns) {
-        const m = html.match(p);
-        if (m) {
-          this.userId = m[1];
-          break;
-        }
+  /**
+   * 通过学期列表 + 当前日期 校正 currentSemesterId
+   *
+   * 规则：
+   *   9月 ~ 次年1月  → 第1学期（学年起始年 = 当年/去年）
+   *   2月 ~ 8月      → 第2学期（学年起始年 = 去年）
+   *
+   * 例：2026-03-25 → 2025-2026 学期2
+   */
+  private async correctCurrentSemester(): Promise<void> {
+    try {
+      await sleep(500);
+      const ok = await this.fetchSemesters();
+      if (!ok || this.allSemesters.length === 0) return;
+
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1; // 1-12
+
+      let startYear: number;
+      let termName: string;
+
+      if (month >= 9) {
+        // 9-12月：本学年第1学期
+        startYear = year;
+        termName = '1';
+      } else if (month >= 2) {
+        // 2-8月：上学年第2学期
+        startYear = year - 1;
+        termName = '2';
+      } else {
+        // 1月：上学年第1学期（考试/寒假尾声）
+        startYear = year - 1;
+        termName = '1';
       }
+
+      // schoolYear 格式如 "2025-2026"，parseInt 取首段年份
+      const match = this.allSemesters.find(s => {
+        const syYear = parseInt(s.schoolYear, 10);
+        return syYear === startYear && String(s.name) === termName;
+      });
+
+      if (match) {
+        if (String(match.id) !== this.currentSemesterId) {
+          console.log('[autoDetect] Correcting semester:', this.currentSemesterId, '→', match.id,
+            `(${match.schoolYear} 学期${match.name})`);
+          this.currentSemesterId = String(match.id);
+        }
+      } else {
+        console.warn('[autoDetect] No semester match for', startYear, 'term', termName);
+      }
+    } catch {
+      console.warn('[autoDetect] Could not correct semester, using detected value');
+    }
+  }
+
+  /**
+   * 请求 innerIndex 页面
+   * @param projectId 项目ID（默认1，实验班可能为62）
+   */
+  private async fetchInnerIndex(projectId: number): Promise<string> {
+    const url = `${this.baseUrl}/courseTableForStd!innerIndex.action?projectId=${projectId}`;
+    const res = await requestWithRetry(url, {
+      method: 'GET',
+      header: {
+        ...this.headers,
+        'X-Requested-With': 'XMLHttpRequest',
+        'Referer': `${this.baseUrl}/courseTableForStd.action`
+      },
+      cookieJar: this.cookieJar,
+      timeout: 10000
+    });
+
+    return res.text;
+  }
+
+  /**
+   * 从 innerIndex HTML 中提取用户 ids
+   * 精确匹配 bg.form.addInput，备选宽松正则兜底
+   */
+  private extractIds(html: string): void {
+    if (this.userId) return;
+
+    // ★ 精确匹配：bg.form.addInput(form, "ids", "188831")
+    const precise = html.match(/bg\.form\.addInput\(form,\s*"ids",\s*"(\d+)"\)/);
+    if (precise) {
+      this.userId = precise[1];
+      console.log('[autoDetect] ✓ ids (precise):', this.userId);
+      return;
     }
 
-    // 2. 扫描学期 ID (务必抓取!)
-    // 对应 Python 完全相同的 4 个正则 pattern
-    if (!this.currentSemesterId) {
-      const semPatterns: RegExp[] = [
-        /semester\.id=(\d+)/,
-        /name="semester\.id"\s+value="(\d+)"/,
-        /bg\.form\.addInput\(form,\s*"semester\.id",\s*"(\d+)"\)/,
-        /value:"(\d+)"/  // 匹配 JS 对象写法，如 value:"262"
-      ];
-      for (const p of semPatterns) {
-        const m = html.match(p);
-        if (m) {
-          // 对应 Python: 简单过滤：学期ID通常是2-3位数字
-          const val = m[1];
-          if (val.length >= 2) {
-            this.currentSemesterId = val;
-            break;
-          }
-        }
-      }
+    // ★ 备选：宽松匹配，应对教务系统改版
+    const fallback = html.match(/["']ids["'][,\s]*["'](\d+)["']/);
+    if (fallback) {
+      this.userId = fallback[1];
+      console.log('[autoDetect] ✓ ids (fallback):', this.userId);
+      return;
     }
+
+    console.error('[autoDetect] ✗ ids not found');
+  }
+
+  /**
+   * 从 innerIndex HTML 中提取 semester.id
+   * 锚定 semesterCalendar 上下文，避免误匹配
+   */
+  private extractSemesterId(html: string): void {
+    if (this.currentSemesterId) return;
+
+    // ★ 精确匹配：semesterCalendar({...value:"282"...})
+    const precise = html.match(/semesterCalendar\(\{[^}]*value:"(\d+)"/);
+    if (precise) {
+      this.currentSemesterId = precise[1];
+      console.log('[autoDetect] ✓ semester.id (precise):', this.currentSemesterId);
+      return;
+    }
+
+    // ★ 备选：semester.id=xxx 形式
+    const fallback = html.match(/semester\.id=(\d{2,})/);
+    if (fallback) {
+      this.currentSemesterId = fallback[1];
+      console.log('[autoDetect] ✓ semester.id (fallback):', this.currentSemesterId);
+      return;
+    }
+
+    console.error('[autoDetect] ✗ semester.id not found');
   }
 
   // ----------------------------------------------------------
   // getData()  —— 对应 Python crawler.get_data()
   // ----------------------------------------------------------
-  async getData(): Promise<Course[]> {
+  async getData(semesterId?: string): Promise<Course[]> {
     if (!this.userId) throw new Error('ID_NOT_FOUND');
-    if (!this.currentSemesterId) throw new Error('SEMESTER_NOT_FOUND');
+    const semId = semesterId || this.currentSemesterId;
+    if (!semId) throw new Error('SEMESTER_NOT_FOUND');
 
-    // ★ 防限流
-    await sleep(1500);
+    // ★ 防限流（requestWithRetry 兜底）
+    await sleep(500);
 
     const postData: Record<string, string> = {
       'ignoreHead': '1',
       'setting.kind': 'std',
       'startWeek': '',
       'project.id': '1',
-      'semester.id': this.currentSemesterId,
+      'semester.id': semId,
       'ids': this.userId
     };
 
@@ -518,7 +519,6 @@ export class SiasCrawler {
       'Content-Type': 'application/x-www-form-urlencoded'
     };
 
-    console.log('[getData] POST courseTable, userId:', this.userId, 'semesterId:', this.currentSemesterId);
     const res = await requestWithRetry(
       `${this.baseUrl}/courseTableForStd!courseTable.action`,
       {
@@ -534,16 +534,11 @@ export class SiasCrawler {
       throw new Error('RATE_LIMITED');
     }
 
-    // ★ 诊断日志
-    console.log('[getData] Response preview:', res.text.substring(0, 500));
-    console.log('[getData] Contains "var teachers":', res.text.includes('var teachers'));
-    console.log('[getData] Contains "TaskActivity":', res.text.includes('TaskActivity'));
+    // ★ session 失效检测
+    this.checkSessionAlive(res.text);
 
     const parsed = this.parse(res.text);
-    console.log('[getData] Parsed courses count:', parsed.length);
-    if (parsed.length > 0) {
-      console.log('[getData] First course:', JSON.stringify(parsed[0]));
-    }
+    console.log('[getData] Parsed courses:', parsed.length);
     return parsed;
   }
 
@@ -600,6 +595,92 @@ export class SiasCrawler {
     return courses;
   }
 
+  /**
+   * 获取成绩页面 HTML
+   * @param semesterId 学期ID
+   * @returns HTML 响应文本（由 grade.ts 的 parseGrades 解析）
+   */
+  async fetchGradeHtml(semesterId: number): Promise<string> {
+    await sleep(500);
+
+    const postData: Record<string, string> = {
+      semesterId: String(semesterId),
+      projectType: '',
+      _: String(Date.now())
+    };
+
+    const res = await requestWithRetry(
+      `${this.baseUrl}/teach/grade/course/person!search.action`,
+      {
+        method: 'POST',
+        header: {
+          ...this.headers,
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        data: encodeFormData(postData),
+        cookieJar: this.cookieJar,
+        timeout: 15000
+      }
+    );
+
+    if (isRateLimited(res.text)) {
+      throw new Error('RATE_LIMITED');
+    }
+
+    // ★ session 失效检测
+    this.checkSessionAlive(res.text);
+
+    return res.text;
+  }
+
+  /**
+   * 获取平均成绩排名页面 HTML
+   * 先访问 innerIndex 触发页面初始化，再请求 search 获取数据表格
+   */
+  async fetchGradeAvgHtml(): Promise<string> {
+    await sleep(500);
+
+    // 1) 触发 innerIndex（必需，否则 search 可能返回空）
+    await requestWithRetry(
+      `${this.baseUrl}/teach/grade/course/student-find-ga!innerIndex.action?projectId=1`,
+      {
+        method: 'GET',
+        header: {
+          ...this.headers,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        cookieJar: this.cookieJar,
+        timeout: 15000
+      }
+    );
+
+    await sleep(300);
+
+    // 2) 请求 search 获取实际数据
+    const res = await requestWithRetry(
+      `${this.baseUrl}/teach/grade/course/student-find-ga!search.action`,
+      {
+        method: 'POST',
+        header: {
+          ...this.headers,
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        cookieJar: this.cookieJar,
+        timeout: 15000
+      }
+    );
+
+    if (isRateLimited(res.text)) {
+      throw new Error('RATE_LIMITED');
+    }
+
+    this.checkSessionAlive(res.text);
+
+    return res.text;
+  }
+
   /** 清理 Cookie（可供外部调用重置会话） */
   reset(): void {
     this.cookieJar.clear();
@@ -614,15 +695,10 @@ export class SiasCrawler {
    */
   async fetchSemesters(): Promise<boolean> {
     try {
-      console.log('[fetchSemesters] Requesting:', `${this.baseUrl}/dataQuery.action`);
-      console.log('[fetchSemesters] Cookie before:', this.cookieJar.toString());
-      
       // 构建请求数据
       const formData: Record<string, string> = {
         dataType: 'semesterCalendar'
       };
-      
-      console.log('[fetchSemesters] Request data:', encodeFormData(formData));
       
       const semesterRes = await requestWithRetry(`${this.baseUrl}/dataQuery.action`, {
         method: 'POST',
@@ -636,11 +712,6 @@ export class SiasCrawler {
         timeout: 10000
       });
 
-      console.log('[fetchSemesters] Cookie after:', this.cookieJar.toString());
-      console.log('[fetchSemesters] Response length:', semesterRes.text.length);
-      console.log('[fetchSemesters] Full response:', semesterRes.text);
-      console.log('[fetchSemesters] Response bytes:', Array.from(semesterRes.text).map(c => c.charCodeAt(0)).slice(0, 20));
-      
       // 检查是否是HTML页面（可能是登录页面）
       if (semesterRes.text.includes('DOCTYPE') || semesterRes.text.includes('html')) {
         console.error('[fetchSemesters] Response is HTML, not JSON');
@@ -654,26 +725,17 @@ export class SiasCrawler {
       }
 
       // 尝试解析JSON
-      let semesterData: any;
+      let semesterData: { semesters?: Record<string, Array<{id: number, schoolYear: string, name: string}>> };
       try {
-        // 去除响应开头的空白字符（tab、回车、换行）
         const cleanedText = semesterRes.text.trim();
-        console.log('[fetchSemesters] Cleaned response length:', cleanedText.length);
-        console.log('[fetchSemesters] Cleaned response preview:', cleanedText.substring(0, 100));
-        
         // 将JavaScript对象字面量转换为JSON格式
         // {yearDom:"..."} → {"yearDom":"..."}
         const jsonText = cleanedText.replace(/([{,])\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":');
-        console.log('[fetchSemesters] Converted to JSON preview:', jsonText.substring(0, 100));
-        
         semesterData = JSON.parse(jsonText);
-      } catch (parseError: any) {
-        console.error('[fetchSemesters] JSON parse error:', parseError.message);
-        console.error('[fetchSemesters] Response that failed to parse:', semesterRes.text);
+      } catch (parseError: unknown) {
+        console.error('[fetchSemesters] JSON parse error:', parseError instanceof Error ? parseError.message : parseError);
         return false;
       }
-      
-      console.log('[fetchSemesters] Parsed JSON:', JSON.stringify(semesterData).substring(0, 200));
 
       // 检查semesters是否存在
       if (!semesterData.semesters) {
@@ -695,7 +757,7 @@ export class SiasCrawler {
 
       console.log('[fetchSemesters] Loaded semesters:', this.allSemesters.length);
       return true;
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('[fetchSemesters] Failed:', e instanceof Error ? e.message : e);
       return false;
     }
@@ -742,6 +804,17 @@ export class SiasCrawler {
   getCurrentSemesterId(): string | null {
     return this.currentSemesterId;
   }
+
+  /**
+   * 检测响应是否为登录页（session 已失效）
+   * 如果是，标记 session 失效并抛出 SESSION_EXPIRED
+   */
+  private checkSessionAlive(html: string): void {
+    if (html.includes('CryptoJS.SHA1')) {
+      import('./session').then(({ invalidateSession }) => invalidateSession());
+      throw new Error('SESSION_EXPIRED');
+    }
+  }
 }
 
 // ============================================================
@@ -756,22 +829,18 @@ export class SiasCrawler {
  * @throws Error 登录失败 / 探测失败 / 获取数据失败
  */
 export async function fetchSchedule(username: string, password: string): Promise<Course[]> {
-  const crawler = new SiasCrawler(username, password);
-
-  // 对应 Python main(): crawler.login()
-  const loginOk = await crawler.login();
-  if (!loginOk) {
-    throw new Error('LOGIN_FAILED');
+  const { getCrawler } = await import('./session');
+  try {
+    const crawler = await getCrawler(username, password);
+    return await crawler.getData();
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message === 'SESSION_EXPIRED') {
+      console.log('[fetchSchedule] Session expired, retrying...');
+      const crawler = await getCrawler(username, password);
+      return await crawler.getData();
+    }
+    throw e;
   }
-
-  // 对应 Python main(): crawler.auto_detect()
-  const detectOk = await crawler.autoDetect();
-  if (!detectOk) {
-    throw new Error('DETECT_FAILED');
-  }
-
-  // 对应 Python main(): crawler.get_data()
-  return await crawler.getData();
 }
 
 /**
@@ -789,6 +858,8 @@ export function translateError(error: string): string {
       return '未找到学期信息，请稍后重试';
     case 'RATE_LIMITED':
       return '教务系统请求过于频繁，请稍后再试';
+    case 'SESSION_EXPIRED':
+      return '登录已过期，请重试';
     case 'NETWORK_ERROR':
       return '教务系统连接失败。请确认当前是否在校园网内，或教务系统已暂时关闭公网访问（建议使用校园网）。';
     default:

@@ -4,6 +4,13 @@
 
 const UPDATE_URL = 'http://limingjing.codes/app/update.json';
 
+interface UpdateData {
+  versionCode: string | number;
+  versionName: string;
+  updateLog?: string;
+  url?: string;
+}
+
 export function checkUpdate() {
   // #ifndef APP-PLUS
   console.log('[Update] H5 模式跳过自动更新检测');
@@ -19,12 +26,13 @@ export function checkUpdate() {
     uni.request({
       url: UPDATE_URL + '?t=' + new Date().getTime(), // 避免浏览器或 CDN 缓存
       method: 'GET',
-      success: (res: any) => {
+      success: (res) => {
         if (res.statusCode === 200 && res.data) {
-          const serverCode = parseInt(String(res.data.versionCode || '0'), 10);
+          const data = res.data as UpdateData;
+          const serverCode = parseInt(String(data.versionCode || '0'), 10);
           console.log(`[Update] 本地版本: ${currentCode}, 云端版本: ${serverCode}`);
           if (serverCode > currentCode) {
-            promptUpdate(res.data);
+            promptUpdate(data);
           }
         }
       },
@@ -36,7 +44,7 @@ export function checkUpdate() {
   // #endif
 }
 
-function promptUpdate(updateData: any) {
+function promptUpdate(updateData: UpdateData) {
   // #ifdef APP-PLUS
   uni.showModal({
     title: `发现新版本 v${updateData.versionName}`,
