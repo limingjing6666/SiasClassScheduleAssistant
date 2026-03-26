@@ -1,18 +1,20 @@
 import type { Course, RenderCourse } from '@/types';
-import { THEME_PALETTES } from '@/config/themes';
-
-const PALETTE = THEME_PALETTES.minimalist;
+import { COURSE_THEMES } from '@/config/themes';
 
 /**
  * 根据课程名称生成固定颜色
  * 相同课程名始终显示相同颜色
  */
-export function getCourseColor(courseName: string): string {
+export function getCourseThemeIndex(courseName: string): number {
   let hash = 0;
   for (let i = 0; i < courseName.length; i++) {
     hash = courseName.charCodeAt(i) + ((hash << 5) - hash);
   }
-  return PALETTE.colors[Math.abs(hash) % PALETTE.colors.length];
+  return Math.abs(hash) % COURSE_THEMES.length;
+}
+
+export function getCourseColor(courseName: string): string {
+  return COURSE_THEMES[getCourseThemeIndex(courseName)].bg;
 }
 
 /**
@@ -59,9 +61,6 @@ export function filterByWeek(courses: Course[], currentWeek: number): Course[] {
  * 确保同一天相邻的课程颜色不同
  */
 export function toRenderCourses(courses: Course[]): RenderCourse[] {
-  const colors = PALETTE.colors;
-  const glowColors = PALETTE.glowColors;
-
   // 先按天和节次排序
   const sorted = [...courses].sort((a, b) => {
     if (a.day !== b.day) return parseInt(a.day) - parseInt(b.day);
@@ -70,44 +69,35 @@ export function toRenderCourses(courses: Course[]): RenderCourse[] {
     return aStart - bStart;
   });
 
-  // 记录每天上一节课使用的颜色
-  const lastColorByDay: Record<string, string> = {};
+  // 记录每天上一节课使用的主题索引，避免相邻同色
+  const lastThemeByDay: Record<string, number> = {};
 
   return sorted.map(course => {
     const { start, step } = parseNodes(course.nodes);
-    let color = getCourseColor(course.name);
-    
-    // 如果和同一天上一节课颜色相同，换一个颜色
-    const lastColor = lastColorByDay[course.day];
-    if (lastColor === color) {
-      // 找下一个不同的颜色
-      let hash = 0;
-      for (let i = 0; i < course.name.length; i++) {
-        hash = course.name.charCodeAt(i) + ((hash << 5) - hash);
-      }
-      const baseIndex = Math.abs(hash) % colors.length;
-      // 尝试下一个颜色
-      for (let i = 1; i < colors.length; i++) {
-        const newColor = colors[(baseIndex + i) % colors.length];
-        if (newColor !== lastColor) {
-          color = newColor;
+    let idx = getCourseThemeIndex(course.name);
+
+    // 如果和同一天上一节课主题相同，换一个
+    const lastIdx = lastThemeByDay[course.day];
+    if (lastIdx === idx) {
+      for (let i = 1; i < COURSE_THEMES.length; i++) {
+        const newIdx = (idx + i) % COURSE_THEMES.length;
+        if (newIdx !== lastIdx) {
+          idx = newIdx;
           break;
         }
       }
     }
-    
-    lastColorByDay[course.day] = color;
 
-    // 获取对应的发光色
-    const colorIndex = colors.indexOf(color);
-    const glowColor = colorIndex >= 0 ? glowColors[colorIndex] : glowColors[0];
+    lastThemeByDay[course.day] = idx;
+    const theme = COURSE_THEMES[idx];
 
     return {
       ...course,
       startNode: start,
       step: step,
-      color: color,
-      glowColor: glowColor
+      color: theme.bg,
+      glowColor: theme.border,
+      themeIndex: idx
     };
   });
 }

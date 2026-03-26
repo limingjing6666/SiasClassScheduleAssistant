@@ -85,85 +85,38 @@ export function savePermissionRequested(): void {
 }
 
 /**
- * 显示首次权限请求弹窗
+ * 判断是否需要显示权限弹窗（供 App.vue 调用）
  */
-export function showFirstTimePermissionRequest(): Promise<boolean> {
-  return new Promise((resolve) => {
-    uni.showModal({
-      title: '开启课前提醒',
-      content: '为了在课程开始前20分钟提醒您上课，请开启通知权限。\n\n应用关闭后仍能正常提醒。',
-      confirmText: '去开启',
-      cancelText: '暂不开启',
-      success: (res) => {
-        if (res.confirm) {
-          // 用户同意，显示详细权限引导
-          showDetailedPermissionGuide();
-        } else {
-          // 用户拒绝，保存标记
-          savePermissionRequested();
-        }
-        resolve(res.confirm);
-      }
-    });
-  });
+export async function shouldShowPermissionModal(): Promise<boolean> {
+  if (!isFirstTimeRequest()) return false;
+  const hasPermission = await checkNotificationPermission();
+  return !hasPermission;
 }
 
 /**
- * 显示详细权限引导弹窗
+ * 用户确认开启权限后的处理
  */
-export function showDetailedPermissionGuide(): void {
-  // #ifdef APP-PLUS
-  const isAndroid = plus.os.name === 'Android';
-
-  const content = isAndroid
-    ? '请按照以下步骤开启权限：\n\n步骤1：开启通知权限\n在应用设置页面，找到"通知"选项，开启通知权限。\n\n步骤2：开启自启动权限\n在应用设置页面，找到"自启动"选项，开启自启动权限。（部分设备可能在"电池优化"或"后台运行"中设置）'
-    : '请按照以下步骤开启权限：\n\n步骤1：开启通知权限\n在应用设置页面，找到"通知"选项，开启通知权限。';
-
-  uni.showModal({
-    title: '权限设置',
-    content: content,
-    confirmText: '去设置',
-    cancelText: '稍后设置',
-    success: (res) => {
-      if (res.confirm) {
-        // 跳转到应用设置页面
-        openAppSettings();
-
-        // 延迟保存标记，给用户时间设置
-        setTimeout(() => {
-          savePermissionRequested();
-        }, 2000);
-      } else {
-        // 用户选择稍后，保存标记
-        savePermissionRequested();
-      }
-    }
-  });
-  // #endif
+export function onPermissionConfirm(): void {
+  openAppSettings();
+  setTimeout(() => {
+    savePermissionRequested();
+  }, 2000);
 }
 
 /**
- * 检查并处理首次权限请求
+ * 用户拒绝开启权限后的处理
+ */
+export function onPermissionCancel(): void {
+  savePermissionRequested();
+}
+
+/**
+ * 检查并处理首次权限请求（非弹窗模式，仅返回权限状态）
  */
 export async function handleFirstTimePermission(): Promise<boolean> {
-  // 检查是否首次
   if (!isFirstTimeRequest()) {
-    // 非首次，检查权限
     return await checkNotificationPermission();
   }
-
-  // 首次，显示弹窗
-  const userAgreed = await showFirstTimePermissionRequest();
-
-  if (userAgreed) {
-    // 用户同意，延迟检查权限（等待用户从设置页面返回）
-    return new Promise((resolve) => {
-      setTimeout(async () => {
-        const hasPermission = await checkNotificationPermission();
-        resolve(hasPermission);
-      }, 3000);
-    });
-  }
-
+  // 首次时由 App.vue 的 MangaModal 处理弹窗
   return false;
 }

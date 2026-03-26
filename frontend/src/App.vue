@@ -1,17 +1,72 @@
 <template>
   <view class="app">
     <slot />
+
+    <!-- 漫画风权限提醒弹窗 -->
+    <MangaModal
+      :visible="showPermissionModal"
+      tag="NOTICE"
+      tag-class="tag-yellow"
+      title="开启课前提醒"
+      content="为了在课程开始前 20 分钟提醒您上课，请开启通知权限。应用关闭后仍能正常提醒。"
+      icon="/static/icons/bell.svg"
+      icon-bg-class="icon-bg-blue"
+      :show-cancel="true"
+      cancel-text="暂不开启"
+      confirm-text="去 开 启"
+      confirm-btn-class="btn-blue"
+      @confirm="onPermConfirm"
+      @cancel="onPermCancel"
+    />
   </view>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import { onLaunch, onShow, onHide } from '@dcloudio/uni-app';
 import { checkUpdate } from '@/utils/update';
 import { useScheduleStore } from '@/stores/schedule';
 import { scheduleTodayReminders } from '@/utils/reminder';
-import { handleFirstTimePermission } from '@/utils/permission';
+import {
+  shouldShowPermissionModal,
+  onPermissionConfirm,
+  onPermissionCancel,
+  checkNotificationPermission
+} from '@/utils/permission';
+import MangaModal from '@/components/MangaModal.vue';
 
 const scheduleStore = useScheduleStore();
+const showPermissionModal = ref(false);
+
+function onPermConfirm() {
+  showPermissionModal.value = false;
+  onPermissionConfirm();
+  // 用户从设置页返回后，尝试设置提醒
+  setTimeout(async () => {
+    const hasPermission = await checkNotificationPermission();
+    if (hasPermission) {
+      tryScheduleReminders();
+    }
+  }, 3000);
+}
+
+function onPermCancel() {
+  showPermissionModal.value = false;
+  onPermissionCancel();
+}
+
+function tryScheduleReminders() {
+  const cachedCourses = uni.getStorageSync('courses');
+  if (!cachedCourses) return;
+  try {
+    const courses = JSON.parse(cachedCourses);
+    const currentWeek = scheduleStore.currentWeek;
+    const count = scheduleTodayReminders(courses, currentWeek);
+    console.log('[App] Scheduled', count, 'reminders');
+  } catch (e) {
+    console.error('[App] 设置提醒失败:', e);
+  }
+}
 
 onLaunch(async () => {
   console.log('App Launch');
@@ -34,17 +89,24 @@ onLaunch(async () => {
   }
 
   // #ifdef APP-PLUS
-  // 处理权限请求（首次弹窗或静默检查）
-  const hasPermission = await handleFirstTimePermission();
-
-  // 设置今日提醒（仅在有权限时）
-  if (hasPermission && cachedCourses) {
-    try {
-      const courses = JSON.parse(cachedCourses);
-      const currentWeek = scheduleStore.currentWeek;
-      scheduleTodayReminders(courses, currentWeek);
-    } catch (e) {
-      console.error('[App] 设置提醒失败:', e);
+  // 检查是否需要显示权限弹窗
+  const needModal = await shouldShowPermissionModal();
+  if (needModal) {
+    // 延迟显示，等页面渲染完
+    setTimeout(() => {
+      showPermissionModal.value = true;
+    }, 1500);
+  } else {
+    // 已有权限，设置今日提醒
+    const hasPermission = await checkNotificationPermission();
+    if (hasPermission && cachedCourses) {
+      try {
+        const courses = JSON.parse(cachedCourses);
+        const currentWeek = scheduleStore.currentWeek;
+        scheduleTodayReminders(courses, currentWeek);
+      } catch (e) {
+        console.error('[App] 设置提醒失败:', e);
+      }
     }
   }
   // #endif
@@ -114,4 +176,13 @@ input {
   background: transparent !important;
   color: var(--text-primary) !important;
 }
+
+/* 隐藏原生 tabBar（使用自定义 TabBar 组件替代） */
+uni-tabbar,
+.uni-tabbar {
+  display: none !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+
 </style>

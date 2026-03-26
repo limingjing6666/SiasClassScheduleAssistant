@@ -1,30 +1,28 @@
 <template>
+  <!-- 日期表头 -->
   <view class="schedule-header">
-    <view class="time-column header-cell">
-      <text class="header-time-text"></text>
-    </view>
+    <view class="time-column header-cell"></view>
     <view
       v-for="day in 7"
       :key="day"
       class="day-column header-cell"
-      :class="{ 'today-header': highlightToday && isToday(day) }"
     >
-      <text class="day-name" :class="{ 'today-text': highlightToday && isToday(day) }">{{ getDayName(day) }}</text>
-      <text v-if="showDates" class="day-date" :class="{ 'today-text': highlightToday && isToday(day) }">{{ getDateOfDay(day) }}</text>
+      <text class="day-name" :class="{ 'day-name-today': highlightToday && isToday(day) }">{{ getShortDayName(day) }}</text>
+      <view v-if="showDates" class="day-date-wrap" :class="{ 'day-date-today': highlightToday && isToday(day) }">
+        <text class="day-date">{{ getDateOfDay(day) }}</text>
+      </view>
     </view>
   </view>
 
-  <scroll-view class="schedule-body" scroll-y :show-scrollbar="false">
+  <!-- 课表主体（可滚动） -->
+  <scroll-view class="schedule-body" scroll-y enhanced :show-scrollbar="false">
     <view class="schedule-grid">
-      <!-- 时间列 -->
+      <!-- 时间侧栏 -->
       <view class="time-column">
-        <view
-          v-for="node in 13"
-          :key="node"
-          class="time-cell"
-        >
+        <view v-for="node in 13" :key="node" class="time-cell">
           <text class="node-num">{{ node }}</text>
-          <text class="node-time">{{ getNodeTimeRange(node, node) }}</text>
+          <text class="node-start">{{ getNodeStart(node) }}</text>
+          <text class="node-end">{{ getNodeEnd(node) }}</text>
         </view>
       </view>
 
@@ -37,11 +35,7 @@
             class="grid-column"
             :class="{ 'today-column': highlightToday && isToday(day) }"
           >
-            <view
-              v-for="node in 13"
-              :key="node"
-              class="grid-cell"
-            ></view>
+            <view v-for="node in 13" :key="node" class="grid-cell"></view>
           </view>
         </view>
 
@@ -52,8 +46,12 @@
           :style="getCourseStyle(course)"
           @click="onCourseClick(course)"
         >
-          <text class="course-name">{{ course.name }}</text>
-          <text class="course-room">{{ course.room }}</text>
+          <view class="course-inner">
+            <text class="course-name">{{ course.name }}</text>
+            <view class="course-tag">
+              <text class="course-tag-text">{{ roomShortMap[index] }}</text>
+            </view>
+          </view>
         </view>
       </view>
     </view>
@@ -61,8 +59,10 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { RenderCourse } from '@/types';
-import { getDayName, getNodeTimeRange } from '@/utils/schedule';
+import { COURSE_THEMES } from '@/config/themes';
+import { NODE_TIMES } from '@/utils/schedule';
 
 const props = withDefaults(defineProps<{
   courses: RenderCourse[];
@@ -80,6 +80,17 @@ const emit = defineEmits<{
   (e: 'course-click', course: RenderCourse): void;
 }>();
 
+const roomShortMap = computed(() => {
+  return props.courses.map(c => {
+    if (!c.room) return '';
+    return c.room
+      .replace(/[([\[\]()（）]/g, '')  // 去掉所有括号
+      .replace(/[\u4e00-\u9fa5]+/g, '') // 去掉中文
+      .replace(/\s+/g, '')              // 去掉空格
+      .trim();
+  });
+});
+
 const NODE_HEIGHT = 100;
 const DAY_WIDTH = 100 / 7;
 
@@ -89,15 +100,28 @@ function isToday(day: number): boolean {
   return adjustedToday === day;
 }
 
+function getShortDayName(day: number): string {
+  const names = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+  return names[day] || '';
+}
+
 function getDateOfDay(day: number): string {
   if (!props.semesterStart) return '';
   const start = new Date(props.semesterStart);
   const daysFromStart = (props.currentWeek - 1) * 7 + (day - 1);
   const targetDate = new Date(start);
   targetDate.setDate(start.getDate() + daysFromStart);
-  const month = targetDate.getMonth() + 1;
-  const date = targetDate.getDate();
+  const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+  const date = String(targetDate.getDate()).padStart(2, '0');
   return `${month}/${date}`;
+}
+
+function getNodeStart(node: number): string {
+  return NODE_TIMES[node]?.start || '';
+}
+
+function getNodeEnd(node: number): string {
+  return NODE_TIMES[node]?.end || '';
 }
 
 function getCourseStyle(course: RenderCourse) {
@@ -105,15 +129,16 @@ function getCourseStyle(course: RenderCourse) {
   const left = (day - 1) * DAY_WIDTH;
   const top = (course.startNode - 1) * NODE_HEIGHT;
   const height = course.step * NODE_HEIGHT;
+  const theme = COURSE_THEMES[course.themeIndex] || COURSE_THEMES[0];
 
   return {
     left: `${left}%`,
     top: `${top}rpx`,
     width: `${DAY_WIDTH}%`,
     height: `${height}rpx`,
-    backgroundColor: course.color,
-    borderRadius: '8rpx',
-    border: '1rpx solid rgba(0,0,0,0.02)'
+    backgroundColor: theme.bg,
+    borderColor: theme.border,
+    color: theme.text
   };
 }
 
@@ -123,11 +148,12 @@ function onCourseClick(course: RenderCourse) {
 </script>
 
 <style scoped>
+/* 日期表头 */
 .schedule-header {
   display: flex;
   background: #FFFFFF;
-  border-bottom: 1rpx solid #EAEAEA;
-  padding: 12rpx 0;
+  border-bottom: 1rpx solid #F0F0F0;
+  padding: 12rpx 0 16rpx;
 }
 
 .header-cell {
@@ -135,22 +161,7 @@ function onCourseClick(course: RenderCourse) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 76rpx;
-}
-
-.today-header {
-  position: relative;
-}
-
-.today-header::after {
-  content: '';
-  position: absolute;
-  bottom: -12rpx;
-  left: 25%;
-  right: 25%;
-  height: 6rpx;
-  background: #000000;
-  border-radius: 4rpx;
+  gap: 8rpx;
 }
 
 .time-column {
@@ -163,36 +174,50 @@ function onCourseClick(course: RenderCourse) {
 }
 
 .day-name {
-  font-size: 24rpx;
-  color: #888888;
-  font-weight: 500;
+  font-size: 22rpx;
+  color: #999999;
+  font-weight: 600;
 }
 
-.day-name.today-text {
+.day-name-today {
   color: #000000;
   font-weight: 700;
 }
 
+.day-date-wrap {
+  padding: 4rpx 12rpx;
+  border-radius: 12rpx;
+  background: transparent;
+}
+
+.day-date-today {
+  background: #000000;
+}
+
 .day-date {
-  font-size: 18rpx;
-  color: #BBBBBB;
-  margin-top: 4rpx;
+  font-size: 20rpx;
+  color: #666666;
+  font-weight: 700;
+  letter-spacing: -1rpx;
 }
 
-.day-date.today-text {
-  color: #000000;
+.day-date-today .day-date {
+  color: #FFFFFF;
 }
 
+/* 课表主体（可滚动） */
 .schedule-body {
   flex: 1;
-  overflow: hidden;
+  height: 0;
 }
 
 .schedule-grid {
   display: flex;
   position: relative;
+  padding-bottom: 200rpx;
 }
 
+/* 时间侧栏 */
 .time-column .time-cell {
   height: 100rpx;
   display: flex;
@@ -200,21 +225,37 @@ function onCourseClick(course: RenderCourse) {
   align-items: center;
   justify-content: center;
   border-bottom: 1rpx solid #F5F5F5;
-  background: #FFFFFF;
+  border-right: 1rpx solid #F0F0F0;
+  background: rgba(245, 245, 245, 0.3);
 }
 
 .node-num {
-  font-size: 22rpx;
-  color: #888888;
+  font-size: 24rpx;
+  color: #1a1a1a;
+  font-weight: 800;
+  margin-bottom: 2rpx;
+}
+
+.node-start {
+  font-size: 18rpx;
+  color: #666666;
   font-weight: 600;
+  font-family: monospace;
+  letter-spacing: -1rpx;
+  line-height: 1;
+  margin-bottom: 2rpx;
 }
 
-.node-time {
+.node-end {
   font-size: 16rpx;
-  color: #BBBBBB;
-  margin-top: 4rpx;
+  color: #AAAAAA;
+  font-weight: 500;
+  font-family: monospace;
+  letter-spacing: -1rpx;
+  line-height: 1;
 }
 
+/* 课程区域 */
 .courses-area {
   flex: 1;
   position: relative;
@@ -242,27 +283,36 @@ function onCourseClick(course: RenderCourse) {
 
 .grid-cell {
   height: 100rpx;
-  border-bottom: 1rpx solid #F5F5F5;
+  border-bottom: 1rpx solid #F8F8F8;
 }
 
+/* 课程卡片 */
 .course-block {
   position: absolute;
-  padding: 8rpx;
+  padding: 2rpx;
   box-sizing: border-box;
-  overflow: hidden;
+}
+
+.course-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 20rpx;
+  border: 2rpx solid;
+  border-color: inherit;
+  background-color: inherit;
+  color: inherit;
+  padding: 12rpx 8rpx;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  margin: 2rpx;
-  text-align: center;
+  justify-content: space-between;
+  overflow: hidden;
 }
 
 .course-name {
   font-size: 22rpx;
-  font-weight: 600;
-  color: #000000;
-  line-height: 1.25;
+  font-weight: 700;
+  line-height: 1.3;
   word-break: break-all;
   overflow: hidden;
   display: -webkit-box;
@@ -270,13 +320,17 @@ function onCourseClick(course: RenderCourse) {
   -webkit-box-orient: vertical;
 }
 
-.course-room {
+.course-tag {
+  margin-top: 8rpx;
+}
+
+.course-tag-text {
   font-size: 18rpx;
-  color: rgba(0, 0, 0, 0.6);
-  margin-top: 6rpx;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 90%;
+  font-weight: 700;
+  font-family: monospace;
+  letter-spacing: -1rpx;
+  opacity: 0.7;
+  word-break: break-all;
+  line-height: 1.2;
 }
 </style>

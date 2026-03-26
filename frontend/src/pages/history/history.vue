@@ -54,30 +54,10 @@
 import { ref, computed, onMounted } from 'vue';
 import type { Course, RenderCourse } from '@/types';
 import { toRenderCourses } from '@/utils/schedule';
-import { SiasCrawler } from '@/utils/crawler';
 import { readPassword } from '@/utils/crypto';
-import { useScheduleStore } from '@/stores/schedule';
+import { getCrawler } from '@/utils/session';
 import CourseDetailModal from '@/components/CourseDetailModal.vue';
 import ScheduleGrid from '@/components/ScheduleGrid.vue';
-
-// ★ 历史页使用独立 crawler（不走共享 session），防止切学期污染课表页的 OkHttp cookie
-let _historyCrawler: SiasCrawler | null = null;
-let _historyUser = '';
-
-async function getHistoryCrawler(username: string, password: string): Promise<SiasCrawler> {
-  // 同一用户复用（同一次页面访问内不重复登录）
-  if (_historyCrawler && _historyUser === username) {
-    return _historyCrawler;
-  }
-  const crawler = new SiasCrawler(username, password);
-  const loginOk = await crawler.login();
-  if (!loginOk) throw new Error('LOGIN_FAILED');
-  const detectOk = await crawler.autoDetect();
-  if (!detectOk) throw new Error('DETECT_FAILED');
-  _historyCrawler = crawler;
-  _historyUser = username;
-  return crawler;
-}
 
 interface Semester {
   id: number;
@@ -85,8 +65,6 @@ interface Semester {
   name: string;
   label: string;
 }
-
-const scheduleStore = useScheduleStore();
 
 const loading = ref(false);
 const semesters = ref<Semester[]>([]);
@@ -202,7 +180,7 @@ async function loadSemesters() {
       return;
     }
 
-    const crawler = await getHistoryCrawler(username, password);
+    const crawler = await getCrawler(username, password);
 
     // 获取当前学期ID
     currentSemesterId.value = crawler.getCurrentSemesterId();
@@ -281,7 +259,7 @@ async function loadCourses(semesterId: number) {
       return;
     }
 
-    const crawler = await getHistoryCrawler(username, password);
+    const crawler = await getCrawler(username, password);
     const courseList = await crawler.getData(String(semesterId));
     courses.value = courseList;
 

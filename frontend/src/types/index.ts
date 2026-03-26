@@ -52,6 +52,8 @@ export interface RenderCourse extends Course {
   step: number;
   /** 背景颜色 */
   color: string;
-  /** 暖色边框色 */
+  /** 边框颜色 */
   glowColor: string;
+  /** 主题索引（对应 COURSE_THEMES 数组下标） */
+  themeIndex: number;
 }

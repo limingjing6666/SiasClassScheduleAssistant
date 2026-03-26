@@ -8,6 +8,7 @@
  */
 
 import { SiasCrawler } from './crawler';
+import type { ProgressCallback } from '@/types/progress';
 
 /** 模块级单例 */
 let _crawler: SiasCrawler | null = null;
@@ -15,8 +16,8 @@ let _username: string = '';
 let _password: string = '';
 /** session 创建时间戳 */
 let _loginTime: number = 0;
-/** session 有效期：5 分钟（实测教务系统 6~9 分钟失效） */
-const SESSION_TTL = 5 * 60 * 1000;
+/** session 有效期：8 分钟（实测教务系统 6~9 分钟失效，checkSessionAlive 兜底） */
+const SESSION_TTL = 8 * 60 * 1000;
 /** login 锁：防止并发重复登录 */
 let _loginPromise: Promise<SiasCrawler> | null = null;
 
@@ -27,7 +28,7 @@ let _loginPromise: Promise<SiasCrawler> | null = null;
  *
  * 自带并发锁：多个页面同时调用时只会登录一次
  */
-export async function getCrawler(username: string, password: string): Promise<SiasCrawler> {
+export async function getCrawler(username: string, password: string, onProgress?: ProgressCallback): Promise<SiasCrawler> {
   const now = Date.now();
   const isSameUser = _crawler && _username === username && _password === password;
   const isAlive = isSameUser && (now - _loginTime < SESSION_TTL);
@@ -43,7 +44,7 @@ export async function getCrawler(username: string, password: string): Promise<Si
     return _loginPromise;
   }
 
-  _loginPromise = doLogin(username, password);
+  _loginPromise = doLogin(username, password, onProgress);
   try {
     return await _loginPromise;
   } finally {
@@ -54,15 +55,20 @@ export async function getCrawler(username: string, password: string): Promise<Si
 /**
  * 执行登录流程
  */
-async function doLogin(username: string, password: string): Promise<SiasCrawler> {
+async function doLogin(username: string, password: string, onProgress?: ProgressCallback): Promise<SiasCrawler> {
   console.log('[session] Creating new crawler session');
+  onProgress?.(0, '初始化请求...');
   const crawler = new SiasCrawler(username, password);
 
+  onProgress?.(10, '建立安全连接...');
   const loginOk = await crawler.login();
   if (!loginOk) throw new Error('LOGIN_FAILED');
+  onProgress?.(45, '验证身份凭证...');
 
+  onProgress?.(55, '解析教务数据...');
   const detectOk = await crawler.autoDetect();
   if (!detectOk) throw new Error('DETECT_FAILED');
+  onProgress?.(65, '解析教务数据...');
 
   // 缓存
   _crawler = crawler;
@@ -94,12 +100,25 @@ export function invalidateSession(): void {
 /**
  * 清除 session（退出登录时调用）
  */
-export function clearSession(): void {
-  console.log('[session] Session cleared');
+export async function clearSession(): Promise<void> {
+  console.log('[session] Session clearing...');
+
+  // 先调用教务系统 logout.action 注销服务端 session
+  if (_crawler) {
+    try {
+      await _crawler.serverLogout();
+      console.log('[session] Server logout completed');
+    } catch (e) {
+      console.warn('[session] Server logout failed (ignored):', e);
+    }
+  }
+
   _crawler?.reset();
   _crawler = null;
   _username = '';
   _password = '';
   _loginTime = 0;
   _loginPromise = null;
+
+  console.log('[session] Session cleared');
 }

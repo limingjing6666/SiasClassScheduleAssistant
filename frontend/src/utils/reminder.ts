@@ -8,6 +8,16 @@ import type { ReminderSettings, ReminderTask } from '@/types/reminder';
 import { NODE_TIMES } from '@/utils/schedule';
 import { DEFAULT_REMINDER_SETTINGS, REMINDER_CACHE_KEY, NOTIFICATION_IDS_KEY } from '@/config/reminder';
 
+/** 简单字符串哈希 → 数值 */
+function hashCode(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
+}
+
 /**
  * 获取提醒设置
  */
@@ -161,29 +171,32 @@ export function scheduleNotification(task: ReminderTask): boolean {
 
   const settings = getReminderSettings();
 
-  const content = `📚 即将上课：${task.courseName}\n⏰ ${task.startTime}-${task.endTime}\n📍 ${task.room}\n👨‍🏫 ${task.teacher}`;
+  const title = '课前提醒';
+  const content = `即将上课：${task.courseName}\n${task.startTime}-${task.endTime}  ${task.room || ''}\n${task.teacher || ''}`;
 
-  // 生成唯一通知 ID，便于追踪
-  const notifyId = `reminder_${task.courseId}_${Date.now()}`;
+  // 生成数值型通知 ID（plus.push 需要 number 类型 id）
+  const notifyId = Math.abs(hashCode(task.courseId)) % 100000;
 
-  const options: Record<string, string | number | boolean> = {
-    id: notifyId,
-    title: '课前提醒',
-    delay: Math.floor(delay / 1000),  // 延迟秒数
-  };
+  const delaySec = Math.floor(delay / 1000);
 
-  if (settings.sound) {
-    options.sound = 'system';
+  console.log(`[Reminder] 创建定时通知: ${task.courseName}，${Math.floor(delay / 60000)}分钟后触发, delay=${delaySec}s, id=${notifyId}`);
+
+  try {
+    plus.push.createMessage(
+      content,
+      JSON.stringify({ courseId: task.courseId }),
+      {
+        title: title,
+        delay: delaySec,
+        sound: settings.sound ? 'system' : 'none',
+        cover: false
+      }
+    );
+    saveNotificationId(String(notifyId));
+  } catch (e) {
+    console.error('[Reminder] createMessage failed:', e);
+    return false;
   }
-
-  if (settings.vibration) {
-    options.vibrate = true;
-  }
-
-  // plus.push.createMessage 返回 void，不依赖返回值
-  plus.push.createMessage(content, JSON.stringify({ courseId: task.courseId }), options);
-  saveNotificationId(notifyId);
-  console.log(`[Reminder] 创建定时通知: ${task.courseName}，${Math.floor(delay / 60000)}分钟后触发`);
   return true;
   // #endif
 

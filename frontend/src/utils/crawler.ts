@@ -11,6 +11,8 @@
 
 import CryptoJS from 'crypto-js';
 import type { Course } from '@/types';
+import type { ProgressCallback } from '@/types/progress';
+import type { ExamBatch } from '@/types/exam';
 
 // ============================================================
 // Cookie 管理工具 —— 模拟 requests.Session 的自动 Cookie 保持
@@ -681,6 +683,187 @@ export class SiasCrawler {
     return res.text;
   }
 
+  /**
+   * 获取指定学期的所有考试批次列表
+   * POST innerIndex，解析 <select name="examBatch.id"> 中所有 <option>
+   * @param semesterId 可选学期ID，不传则查当前学期
+   */
+  async fetchExamBatches(semesterId?: number): Promise<ExamBatch[]> {
+    await sleep(500);
+
+    const postData: Record<string, string> = { 'project.id': '1' };
+    if (semesterId) {
+      postData['semester.id'] = String(semesterId);
+    }
+
+    const indexRes = await requestWithRetry(
+      `${this.baseUrl}/stdExamTable!innerIndex.action`,
+      {
+        method: 'POST',
+        header: {
+          ...this.headers,
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        data: encodeFormData(postData),
+        cookieJar: this.cookieJar,
+        timeout: 15000
+      }
+    );
+
+    if (isRateLimited(indexRes.text)) {
+      throw new Error('RATE_LIMITED');
+    }
+    this.checkSessionAlive(indexRes.text);
+
+    // 解析所有 <option value="xxx">yyy</option>
+    const batches: ExamBatch[] = [];
+    const optionRegex = /<option\s+value="(\d+)"[^>]*>([^<]+)<\/option>/g;
+    for (let m = optionRegex.exec(indexRes.text); m !== null; m = optionRegex.exec(indexRes.text)) {
+      batches.push({ id: Number(m[1]), name: m[2].trim() });
+    }
+
+    console.log('[fetchExamBatches] Found', batches.length, 'batches:', batches.map(b => `${b.id}(${b.name})`).join(', '));
+    return batches;
+  }
+
+  /**
+   * 获取指定考试批次的考试安排 HTML
+   * @param batchId 考试批次ID（从 fetchExamBatches 获取）
+   */
+  async fetchExamTableHtml(batchId: number): Promise<string> {
+    await sleep(300);
+
+    const res = await requestWithRetry(
+      `${this.baseUrl}/stdExamTable!examTable.action`,
+      {
+        method: 'POST',
+        header: {
+          ...this.headers,
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        data: encodeFormData({ 'examBatch.id': String(batchId), '_': String(Date.now()) }),
+        cookieJar: this.cookieJar,
+        timeout: 15000
+      }
+    );
+
+    if (isRateLimited(res.text)) {
+      throw new Error('RATE_LIMITED');
+    }
+    this.checkSessionAlive(res.text);
+
+    return res.text;
+  }
+
+  /**
+   * 获取校历页面 HTML
+   * POST schoolCalendar!search.action 获取指定学期的校历数据
+   * @param semesterId 可选学期ID，不传则用当前学期
+   */
+  async fetchSchoolCalendarHtml(semesterId?: number): Promise<string> {
+    await sleep(500);
+
+    const semId = semesterId ? String(semesterId) : (this.currentSemesterId || '');
+    const res = await requestWithRetry(
+      `${this.baseUrl}/schoolCalendar!search.action`,
+      {
+        method: 'POST',
+        header: {
+          ...this.headers,
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        data: encodeFormData({ 'semester.id': semId }),
+        cookieJar: this.cookieJar,
+        timeout: 15000
+      }
+    );
+
+    if (isRateLimited(res.text)) {
+      throw new Error('RATE_LIMITED');
+    }
+    this.checkSessionAlive(res.text);
+
+    return res.text;
+  }
+
+  /**
+   * 获取个人资料页面 HTML
+   * GET homeExt!main.action 获取包含姓名、头像等信息的首页
+   */
+  async fetchProfileHtml(): Promise<string> {
+    await sleep(300);
+
+    const res = await requestWithRetry(
+      `${this.baseUrl}/homeExt!main.action`,
+      {
+        method: 'GET',
+        header: {
+          ...this.headers,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        cookieJar: this.cookieJar,
+        timeout: 15000
+      }
+    );
+
+    if (isRateLimited(res.text)) {
+      throw new Error('RATE_LIMITED');
+    }
+    this.checkSessionAlive(res.text);
+
+    return res.text;
+  }
+
+  /**
+   * 下载头像图片到本地临时文件
+   * GET showSelfAvatar.action?user.name=学号
+   * 返回本地临时文件路径，可直接用于 <image :src="">
+   */
+  async downloadAvatar(studentId: string): Promise<string> {
+    const url = `${this.baseUrl}/showSelfAvatar.action?user.name=${studentId}`;
+
+    return new Promise((resolve, reject) => {
+      uni.downloadFile({
+        url,
+        header: {
+          ...this.headers,
+          'Referer': `${this.baseUrl}/homeExt!main.action`
+        },
+        timeout: 10000,
+        success: (res) => {
+          if (res.statusCode === 200 && res.tempFilePath) {
+            resolve(res.tempFilePath);
+          } else {
+            reject(new Error('AVATAR_DOWNLOAD_FAILED'));
+          }
+        },
+        fail: (err) => {
+          console.error('[Crawler] downloadAvatar failed:', err);
+          reject(new Error('AVATAR_DOWNLOAD_FAILED'));
+        }
+      });
+    });
+  }
+
+  /**
+   * 调用教务系统 logout.action 注销服务端 session
+   */
+  async serverLogout(): Promise<void> {
+    try {
+      await uniRequest(`${this.baseUrl}/logout.action`, {
+        method: 'GET',
+        header: { ...this.headers },
+        cookieJar: this.cookieJar,
+        timeout: 5000
+      });
+    } catch {
+      // 忽略网络错误
+    }
+  }
+
   /** 清理 Cookie（可供外部调用重置会话） */
   reset(): void {
     this.cookieJar.clear();
@@ -828,16 +1011,23 @@ export class SiasCrawler {
  * @returns 课程列表
  * @throws Error 登录失败 / 探测失败 / 获取数据失败
  */
-export async function fetchSchedule(username: string, password: string): Promise<Course[]> {
+export async function fetchSchedule(username: string, password: string, onProgress?: ProgressCallback): Promise<Course[]> {
   const { getCrawler } = await import('./session');
   try {
-    const crawler = await getCrawler(username, password);
-    return await crawler.getData();
+    const crawler = await getCrawler(username, password, onProgress);
+    onProgress?.(85, '同步课程信息...');
+    const courses = await crawler.getData();
+    onProgress?.(100, '同步完成');
+    return courses;
   } catch (e: unknown) {
     if (e instanceof Error && e.message === 'SESSION_EXPIRED') {
       console.log('[fetchSchedule] Session expired, retrying...');
-      const crawler = await getCrawler(username, password);
-      return await crawler.getData();
+      onProgress?.(10, '重新建立连接...');
+      const crawler = await getCrawler(username, password, onProgress);
+      onProgress?.(85, '同步课程信息...');
+      const courses = await crawler.getData();
+      onProgress?.(100, '同步完成');
+      return courses;
     }
     throw e;
   }
