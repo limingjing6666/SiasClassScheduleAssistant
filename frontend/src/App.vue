@@ -2,6 +2,18 @@
   <view class="app">
     <slot />
 
+    <!-- 漫画风下载进度弹窗 -->
+    <view v-if="downloadPercent >= 0" class="download-overlay">
+      <view class="download-card">
+        <text class="download-title">正在更新</text>
+        <view class="download-bar-track">
+          <view class="download-bar-fill" :style="{ width: downloadPercent + '%' }"></view>
+        </view>
+        <text class="download-status">{{ downloadStatus }}</text>
+        <text class="download-percent">{{ downloadPercent }}%</text>
+      </view>
+    </view>
+
     <!-- 漫画风权限提醒弹窗 -->
     <MangaModal
       :visible="showPermissionModal"
@@ -24,7 +36,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { onLaunch, onShow, onHide } from '@dcloudio/uni-app';
-import { checkUpdate } from '@/utils/update';
+import { checkUpdate, onDownloadProgress } from '@/utils/update';
 import { useScheduleStore } from '@/stores/schedule';
 import { scheduleTodayReminders } from '@/utils/reminder';
 import {
@@ -37,6 +49,14 @@ import MangaModal from '@/components/MangaModal.vue';
 
 const scheduleStore = useScheduleStore();
 const showPermissionModal = ref(false);
+const downloadPercent = ref(-1);
+const downloadStatus = ref('');
+
+// 注册下载进度回调
+onDownloadProgress((percent, status) => {
+  downloadPercent.value = percent;
+  downloadStatus.value = status;
+});
 
 function onPermConfirm() {
   showPermissionModal.value = false;
@@ -83,7 +103,7 @@ onLaunch(async () => {
   const cachedUser = uni.getStorageSync('userInfo');
   const cachedCourses = uni.getStorageSync('courses');
   if (cachedUser && cachedCourses) {
-    uni.switchTab({
+    uni.reLaunch({
       url: '/pages/schedule/schedule'
     });
   }
@@ -177,12 +197,93 @@ input {
   color: var(--text-primary) !important;
 }
 
-/* 隐藏原生 tabBar（使用自定义 TabBar 组件替代） */
+/* 彻底隐藏原生 tabBar 及其占位容器 */
 uni-tabbar,
-.uni-tabbar {
+.uni-tabbar,
+.uni-tabbar-bottom,
+uni-tabbar .uni-tabbar,
+uni-tabbar .uni-tabbar-border {
   display: none !important;
   height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
   overflow: hidden !important;
+  visibility: hidden !important;
 }
 
+/* 确保页面内容不为原生 tabBar 预留底部空间 */
+uni-page-wrapper,
+uni-page-body {
+  padding-bottom: 0 !important;
+}
+
+/* ========================================
+   下载更新进度弹窗 (漫画风)
+   ======================================== */
+.download-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx;
+}
+
+.download-card {
+  width: 100%;
+  max-width: 560rpx;
+  background: #FFFFFF;
+  border: 6rpx solid #000000;
+  border-radius: 36rpx;
+  box-shadow: 10rpx 10rpx 0 #000000;
+  padding: 48rpx 40rpx;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.download-title {
+  font-size: 36rpx;
+  font-weight: 900;
+  color: #000000;
+  margin-bottom: 32rpx;
+  letter-spacing: 4rpx;
+}
+
+.download-bar-track {
+  width: 100%;
+  height: 20rpx;
+  background: #F3F4F6;
+  border: 3rpx solid #000000;
+  border-radius: 20rpx;
+  overflow: hidden;
+  margin-bottom: 20rpx;
+}
+
+.download-bar-fill {
+  height: 100%;
+  background: #55EFC4;
+  border-radius: 20rpx;
+  transition: width 0.3s ease;
+}
+
+.download-status {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #666666;
+  margin-bottom: 8rpx;
+}
+
+.download-percent {
+  font-size: 48rpx;
+  font-weight: 900;
+  color: #000000;
+  letter-spacing: -2rpx;
+}
 </style>
