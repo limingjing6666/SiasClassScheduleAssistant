@@ -285,7 +285,9 @@ function retryLoad() {
 <style scoped>
 .page {
   min-height: 100vh;
-  background: #FFFFFF;
+  background: #F4F4F5;
+  background-image: radial-gradient(#D4D4D8 1.5px, transparent 1.5px);
+  background-size: 20px 20px;
   display: flex;
   flex-direction: column;
 }
@@ -293,50 +295,7 @@ function retryLoad() {
 .page-header {
   background: #FFFFFF;
   padding: 0 24rpx 16rpx;
-  border-bottom: 1rpx solid #F0F0F0;
-}
-
-/* 筛选栏 */
-.filter-bar {
-  padding: 20rpx 24rpx;
-  background: #FFFFFF;
-  display: flex;
-  flex-direction: column;
-  gap: 20rpx;
-}
-
-.filter-item {
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
-
-.filter-label {
-  font-size: 22rpx;
-  font-weight: 600;
-  color: #999999;
-  letter-spacing: 1rpx;
-  padding-left: 4rpx;
-}
-
-.filter-picker {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #F8F8F8;
-  padding: 20rpx 28rpx;
-  border-radius: 16rpx;
-}
-
-.filter-value {
-  font-size: 28rpx;
-  color: #333333;
-  font-weight: 600;
-}
-
-.filter-arrow {
-  font-size: 22rpx;
-  color: #999999;
+  border-bottom: 3rpx solid #000000;
 }
 
 .status-bar {
@@ -351,16 +310,62 @@ function retryLoad() {
 }
 
 .back-btn {
-  font-size: 56rpx;
+  font-size: 48rpx;
   color: #000000;
+  font-weight: 900;
   line-height: 1;
   padding-right: 8rpx;
 }
 
 .page-title {
   font-size: 40rpx;
-  font-weight: 800;
+  font-weight: 900;
   color: #000000;
+}
+
+/* 筛选栏 */
+.filter-bar {
+  padding: 20rpx 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.filter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.filter-label {
+  font-size: 22rpx;
+  font-weight: 900;
+  color: #999999;
+  letter-spacing: 2rpx;
+  padding-left: 4rpx;
+}
+
+.filter-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 12rpx;
+  background: #000000;
+  padding: 14rpx 28rpx;
+  border-radius: 14rpx;
+  border: 3rpx solid #000000;
+  box-shadow: 3rpx 3rpx 0 #000000;
+}
+
+.filter-value {
+  font-size: 24rpx;
+  color: #FFFFFF;
+  font-weight: 900;
+  letter-spacing: 1rpx;
+}
+
+.filter-arrow {
+  font-size: 18rpx;
+  color: #FFFFFF;
 }
 
 /* 加载态 */
@@ -376,10 +381,11 @@ function retryLoad() {
 .loading-spinner {
   width: 48rpx;
   height: 48rpx;
-  border: 4rpx solid #EAEAEA;
-  border-top-color: #000000;
+  border: 5rpx solid #F0F0F0;
+  border-top-color: #55EFC4;
+  border-right-color: #55EFC4;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
@@ -388,7 +394,8 @@ function retryLoad() {
 
 .loading-text {
   font-size: 26rpx;
-  color: #888888;
+  color: #999999;
+  font-weight: 700;
 }
 
 /* 内容区 */
@@ -398,48 +405,57 @@ function retryLoad() {
 }
 
 .section {
-  padding: 32rpx 24rpx 0;
+  padding: 28rpx 24rpx 0;
 }
 
 .section-title {
-  font-size: 28rpx;
-  font-weight: 700;
-  color: #999999;
-  letter-spacing: 2rpx;
-  text-transform: uppercase;
-  margin-bottom: 24rpx;
-  display: block;
+  display: inline-block;
+  font-size: 22rpx;
+  font-weight: 900;
+  color: #000000;
+  letter-spacing: 4rpx;
+  background: #74B9FF;
+  border: 3rpx solid #000000;
+  padding: 6rpx 20rpx;
+  box-shadow: 3rpx 3rpx 0 #000000;
+  transform: rotate(-2deg);
+  margin-bottom: 20rpx;
 }
 
-/* 已排考考试卡片 */
+/* 考试卡片 */
 .exam-card {
-  background: #F8F8F8;
+  background: #FFFFFF;
+  border: 3rpx solid #000000;
   border-radius: 24rpx;
-  padding: 32rpx;
+  box-shadow: 4rpx 4rpx 0 #000000;
+  padding: 28rpx;
   margin-bottom: 24rpx;
+  box-sizing: border-box;
+  margin-right: 6rpx;
 }
 
 .exam-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24rpx;
+  margin-bottom: 20rpx;
 }
 
 .exam-name {
-  font-size: 32rpx;
-  font-weight: 800;
+  font-size: 30rpx;
+  font-weight: 900;
   color: #000000;
   flex: 1;
   margin-right: 16rpx;
 }
 
 .exam-type-tag {
-  font-size: 22rpx;
-  font-weight: 600;
-  color: #666666;
-  background: #EEEEEE;
-  padding: 6rpx 16rpx;
+  font-size: 20rpx;
+  font-weight: 900;
+  color: #000000;
+  background: #FFEAA7;
+  border: 2rpx solid #000000;
+  padding: 4rpx 14rpx;
   border-radius: 8rpx;
   flex-shrink: 0;
 }
@@ -447,67 +463,70 @@ function retryLoad() {
 .exam-details {
   display: flex;
   flex-direction: column;
-  gap: 16rpx;
+  gap: 12rpx;
 }
 
 .exam-row {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 12rpx;
 }
 
 .exam-label {
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #999999;
-  font-weight: 600;
+  font-weight: 700;
   width: 80rpx;
   flex-shrink: 0;
 }
 
 .exam-value {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #333333;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #000000;
 }
 
 .exam-seat {
-  font-size: 32rpx;
-  font-weight: 800;
+  font-size: 30rpx;
+  font-weight: 900;
   color: #000000;
 }
 
 .exam-pending {
-  padding: 20rpx 0;
+  padding: 16rpx 0;
 }
 
 .exam-pending-text {
   font-size: 26rpx;
   color: #BBBBBB;
-  font-weight: 500;
+  font-weight: 700;
 }
 
 .exam-footer {
-  margin-top: 20rpx;
-  padding-top: 16rpx;
-  border-top: 1rpx solid #EEEEEE;
+  margin-top: 16rpx;
+  padding-top: 12rpx;
+  border-top: 2rpx dashed #E5E7EB;
 }
 
 .exam-status {
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #999999;
-  font-weight: 500;
+  font-weight: 700;
 }
 
 /* 不排考考试 */
 .unscheduled-list {
-  background: #F8F8F8;
+  background: #FFFFFF;
+  border: 3rpx solid #000000;
   border-radius: 24rpx;
+  box-shadow: 4rpx 4rpx 0 #000000;
   overflow: hidden;
+  margin-right: 6rpx;
 }
 
 .unscheduled-item {
-  padding: 24rpx 32rpx;
-  border-bottom: 1rpx solid #F0F0F0;
+  padding: 24rpx 28rpx;
+  border-bottom: 2rpx solid #000000;
 }
 
 .unscheduled-item:last-child {
@@ -516,8 +535,8 @@ function retryLoad() {
 
 .unscheduled-name {
   font-size: 28rpx;
-  color: #333333;
-  font-weight: 500;
+  color: #000000;
+  font-weight: 700;
 }
 
 .bottom-spacer {
@@ -537,23 +556,32 @@ function retryLoad() {
 .empty-text-large {
   font-size: 56rpx;
   color: #CCCCCC;
-  font-weight: 300;
+  font-weight: 900;
 }
 
 .empty-text {
   font-size: 28rpx;
-  color: #888888;
+  color: #999999;
+  font-weight: 700;
 }
 
 .retry-btn {
   margin-top: 24rpx;
   padding: 16rpx 48rpx;
   background: #000000;
-  border-radius: 32rpx;
+  border: 3rpx solid #000000;
+  border-radius: 14rpx;
+  box-shadow: 3rpx 3rpx 0 #000000;
+}
+
+.retry-btn:active {
+  transform: translate(2rpx, 2rpx);
+  box-shadow: 1rpx 1rpx 0 #000000;
 }
 
 .retry-text {
   font-size: 28rpx;
   color: #FFFFFF;
+  font-weight: 900;
 }
 </style>

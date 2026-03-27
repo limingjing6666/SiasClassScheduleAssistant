@@ -156,7 +156,7 @@ async function handleLogin() {
 
     // 保持 loading 状态直到跳转，避免表单闪现
     setTimeout(() => {
-      uni.switchTab({
+      uni.reLaunch({
         url: '/pages/schedule/schedule',
         complete: () => {
           loading.value = false;

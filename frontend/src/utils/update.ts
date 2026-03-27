@@ -60,43 +60,66 @@ function promptUpdate(updateData: UpdateData) {
   // #endif
 }
 
+/** 全局下载进度（供外部 UI 读取） */
+let _progressCallback: ((percent: number, status: string) => void) | null = null;
+
+/**
+ * 注册下载进度回调（App.vue 调用）
+ */
+export function onDownloadProgress(cb: (percent: number, status: string) => void) {
+  _progressCallback = cb;
+}
+
 function doDownload(url: string) {
   // #ifdef APP-PLUS
-  uni.showLoading({ title: '正在下载更新包...', mask: true });
-
   const isApk = url.toLowerCase().includes('.apk');
   const extension = isApk ? '.apk' : '.wgt';
   const savePath = '_doc/update/sias_update_' + new Date().getTime() + extension;
+
+  // 通知 UI 开始下载
+  _progressCallback?.(0, '准备下载...');
 
   const dtask = plus.downloader.createDownload(
     url,
     { filename: savePath },
     (downloadResult, status) => {
-      uni.hideLoading();
       if (status === 200 && downloadResult.filename) {
-        // 确保使用带正确后缀的本地文件路径
+        _progressCallback?.(100, '安装中...');
         plus.runtime.install(
           downloadResult.filename,
           { force: true },
           () => {
             if (isApk) {
+              _progressCallback?.(-1, ''); // 关闭进度
               console.log('[Update] APK 安装程序已由系统调起');
             } else {
-              uni.showToast({ title: '热更新安装完毕，即将重启', icon: 'none' });
+              _progressCallback?.(100, '即将重启...');
               setTimeout(() => { plus.runtime.restart(); }, 1500);
             }
           },
           (e) => {
+            _progressCallback?.(-1, '');
             console.error('[Update] 安装包覆盖失败', e);
-            uni.showToast({ title: '安装失败，请检查包结构', icon: 'none' });
+            uni.showToast({ title: '安装失败', icon: 'none' });
           }
         );
       } else {
+        _progressCallback?.(-1, '');
         console.error('[Update] 下载失败, status:', status);
-        uni.showToast({ title: '下载失败，请确认网络连接', icon: 'none' });
+        uni.showToast({ title: '下载失败', icon: 'none' });
       }
     }
   );
+
+  // 监听下载进度
+  dtask.addEventListener('statechanged', (task) => {
+    if (task.totalSize && task.totalSize > 0 && task.downloadedSize) {
+      const percent = Math.round((task.downloadedSize / task.totalSize) * 100);
+      const downloadedMB = (task.downloadedSize / 1024 / 1024).toFixed(1);
+      const totalMB = (task.totalSize / 1024 / 1024).toFixed(1);
+      _progressCallback?.(percent, `${downloadedMB}MB / ${totalMB}MB`);
+    }
+  });
 
   dtask.start();
   // #endif

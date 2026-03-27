@@ -559,38 +559,51 @@ export class SiasCrawler {
       const chunk = chunks[i];
 
       // --- 提取教师名 ---
-      // 对应 Python: t_name = "未知"
+      // 优先从 actTeachers（当前活动的实际授课教师）提取，降级用 teachers（课程所有教师列表）
       let tName = '未知';
-      // 对应 Python: re.findall(r'name\s*:\s*["\']([^"\']+)["\']', chunk)
-      const namesFound = [...chunk.matchAll(/name\s*:\s*["']([^"']+)["']/g)];
-      if (namesFound.length > 0) {
-        for (const nameMatch of namesFound) {
-          // 对应 Python: if name.strip():
-          if (nameMatch[1].trim()) {
-            tName = nameMatch[1];
+      const beforeTask = chunk.split(/new\s+TaskActivity/)[0] || '';
+
+      // 1. 优先匹配 actTeachers = [{...name:"张芳君"...}]（离 TaskActivity 最近的那个）
+      const actTeacherMatches = [...beforeTask.matchAll(/var\s+actTeachers\s*=\s*\[([^\]]*)\]/g)];
+      if (actTeacherMatches.length > 0) {
+        // 取最后一个 actTeachers 定义（最接近 TaskActivity 的）
+        const lastActTeacher = actTeacherMatches[actTeacherMatches.length - 1][1];
+        const actNames = [...lastActTeacher.matchAll(/name\s*:\s*["']([^"']+)["']/g)];
+        if (actNames.length > 0 && actNames[0][1].trim()) {
+          tName = actNames[0][1].trim();
+        }
+      }
+
+      // 2. 降级：从 teachers 数组取第一个
+      if (tName === '未知') {
+        const namesFound = [...beforeTask.matchAll(/name\s*:\s*["']([^"']+)["']/g)];
+        for (const m of namesFound) {
+          if (m[1].trim()) {
+            tName = m[1].trim();
             break;
           }
         }
       }
 
-      // --- 提取 TaskActivity ---
-      // 对应 Python: re.search(r'new TaskActivity\((.*?)\);', chunk, re.DOTALL)
-      const task = chunk.match(/new TaskActivity\(([\s\S]*?)\);/);
-      if (!task) continue;
+      // --- 提取所有 TaskActivity（同一教师块可能有多个活动：理论+实践） ---
+      const tasks = [...chunk.matchAll(/new TaskActivity\(([\s\S]*?)\);/g)];
+      if (tasks.length === 0) continue;
 
-      // 对应 Python: re.findall(r'"([^"]*)"', task.group(1))
-      const args = [...task[1].matchAll(/"([^"]*)"/g)].map(m => m[1]);
+      console.log(`[parse] chunk ${i}: teacher="${tName}", tasks=${tasks.length}, beforeTask="${beforeTask.substring(0, 120)}..."`);
 
-      // 对应 Python: if len(args) >= 8:
-      if (args.length >= 8) {
-        courses.push({
-          name: args[2],    // 课程名称
-          teacher: tName,   // 教师姓名
-          room: args[6],    // 教室
-          day: args[1],     // 星期几
-          nodes: args[0],   // 节次
-          weeks: args[7]    // 周次二进制字符串
-        });
+      for (const task of tasks) {
+        const args = [...task[1].matchAll(/"([^"]*)"/g)].map(m => m[1]);
+        if (args.length >= 8) {
+          console.log(`[parse]   → course="${args[2]}", day=${args[1]}, nodes=${args[0]}, room="${args[6]}", teacher="${tName}"`);
+          courses.push({
+            name: args[2],    // 课程名称
+            teacher: tName,   // 教师姓名
+            room: args[6],    // 教室
+            day: args[1],     // 星期几
+            nodes: args[0],   // 节次
+            weeks: args[7]    // 周次二进制字符串
+          });
+        }
       }
     }
 

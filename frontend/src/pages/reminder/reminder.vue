@@ -118,12 +118,15 @@ function showAdvancePicker() {
 <style scoped>
 .reminder-page {
   min-height: 100vh;
-  background: #F5F5F5;
+  background: #F4F4F5;
+  background-image: radial-gradient(#D4D4D8 1.5px, transparent 1.5px);
+  background-size: 20px 20px;
 }
 
 .page-header {
   background: #FFFFFF;
-  padding: 32rpx;
+  padding: 0 24rpx 16rpx;
+  border-bottom: 3rpx solid #000000;
 }
 
 .status-bar {
@@ -134,26 +137,30 @@ function showAdvancePicker() {
   display: flex;
   align-items: center;
   gap: 16rpx;
-  margin-top: 16rpx;
+  padding: 16rpx 0 8rpx;
 }
 
 .back-btn {
-  font-size: 56rpx;
+  font-size: 48rpx;
   color: #000000;
+  font-weight: 900;
   line-height: 1;
   padding-right: 8rpx;
 }
 
 .page-title {
   font-size: 40rpx;
-  font-weight: 800;
+  font-weight: 900;
   color: #000000;
 }
 
 .settings-list {
   margin: 24rpx;
+  margin-right: 30rpx;
   background: #FFFFFF;
-  border-radius: 12rpx;
+  border: 3rpx solid #000000;
+  border-radius: 20rpx;
+  box-shadow: 4rpx 4rpx 0 #000000;
   overflow: hidden;
 }
 
@@ -161,8 +168,8 @@ function showAdvancePicker() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 32rpx;
-  border-bottom: 1rpx solid #F0F0F0;
+  padding: 28rpx 28rpx;
+  border-bottom: 2rpx solid #000000;
 }
 
 .setting-item:last-child {
@@ -170,23 +177,25 @@ function showAdvancePicker() {
 }
 
 .setting-item:active {
-  background: #FAFAFA;
+  background: #F9FAFB;
 }
 
 .setting-left {
   display: flex;
   flex-direction: column;
-  gap: 8rpx;
+  gap: 6rpx;
 }
 
 .setting-label {
   font-size: 30rpx;
-  color: #333333;
+  color: #000000;
+  font-weight: 900;
 }
 
 .setting-desc {
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #999999;
+  font-weight: 700;
 }
 
 .setting-right {
@@ -196,23 +205,26 @@ function showAdvancePicker() {
 }
 
 .setting-value {
-  font-size: 28rpx;
-  color: #999999;
+  font-size: 26rpx;
+  color: #000000;
+  font-weight: 900;
 }
 
 .setting-arrow {
-  font-size: 36rpx;
-  color: #CCCCCC;
+  font-size: 32rpx;
+  color: #000000;
+  font-weight: 900;
 }
 
 .tip-section {
-  margin: 0 36rpx;
-  padding: 24rpx 0;
+  margin: 0 32rpx;
+  padding: 20rpx 0;
 }
 
 .tip-text {
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #999999;
+  font-weight: 700;
   line-height: 1.6;
 }
 </style>

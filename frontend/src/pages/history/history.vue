@@ -32,6 +32,7 @@
     <ScheduleGrid
       v-else-if="courses.length > 0"
       :courses="displayCourses"
+      detail-mode
       @course-click="showCourseDetail"
     />
 
@@ -307,13 +308,14 @@ function closeDetail() {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #FFFFFF;
+  background: #F4F4F5;
+  background-image: radial-gradient(#D4D4D8 1.5px, transparent 1.5px);
+  background-size: 20px 20px;
 }
 
-/* 头部 */
 .page-header {
   background: #FFFFFF;
-  border-bottom: 1rpx solid #EAEAEA;
+  border-bottom: 3rpx solid #000000;
 }
 
 .status-bar {
@@ -328,53 +330,64 @@ function closeDetail() {
 }
 
 .back-btn {
-  width: 56rpx;
-  height: 56rpx;
+  width: 52rpx;
+  height: 52rpx;
+  background: #000000;
+  border: 3rpx solid #000000;
+  border-radius: 14rpx;
+  box-shadow: 3rpx 3rpx 0 #000000;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+.back-btn:active {
+  transform: translate(2rpx, 2rpx);
+  box-shadow: 1rpx 1rpx 0 #000000;
+}
+
 .back-icon {
-  font-size: 48rpx;
-  color: #000000;
-  font-weight: 300;
+  font-size: 36rpx;
+  color: #FFFFFF;
+  font-weight: 900;
 }
 
 .page-title {
   font-size: 36rpx;
-  font-weight: 700;
+  font-weight: 900;
   color: #000000;
 }
 
 .placeholder {
-  width: 56rpx;
+  width: 52rpx;
 }
 
 /* 学期选择器 */
 .semester-bar {
-  padding: 16rpx 32rpx;
-  background: #F5F5F5;
+  padding: 16rpx 24rpx;
 }
 
 .semester-picker {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  background: #FFFFFF;
-  padding: 20rpx 24rpx;
-  border-radius: 8rpx;
+  gap: 12rpx;
+  background: #000000;
+  padding: 14rpx 28rpx;
+  border-radius: 14rpx;
+  border: 3rpx solid #000000;
+  box-shadow: 3rpx 3rpx 0 #000000;
 }
 
 .semester-text {
-  font-size: 28rpx;
-  color: #333333;
-  font-weight: 500;
+  font-size: 24rpx;
+  color: #FFFFFF;
+  font-weight: 900;
+  letter-spacing: 1rpx;
 }
 
 .semester-arrow {
-  font-size: 20rpx;
-  color: #888888;
+  font-size: 18rpx;
+  color: #FFFFFF;
 }
 
 /* 加载状态 */
@@ -390,10 +403,11 @@ function closeDetail() {
 .loading-spinner {
   width: 48rpx;
   height: 48rpx;
-  border: 4rpx solid #EAEAEA;
-  border-top-color: #000000;
+  border: 5rpx solid #F0F0F0;
+  border-top-color: #55EFC4;
+  border-right-color: #55EFC4;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
@@ -402,7 +416,8 @@ function closeDetail() {
 
 .loading-text {
   font-size: 26rpx;
-  color: #888888;
+  color: #999999;
+  font-weight: 700;
 }
 
 /* 空状态 */
@@ -421,6 +436,7 @@ function closeDetail() {
 
 .empty-text {
   font-size: 28rpx;
-  color: #888888;
+  color: #999999;
+  font-weight: 700;
 }
 </style>

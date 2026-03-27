@@ -255,7 +255,9 @@ function retryLoad() {
 <style scoped>
 .page {
   min-height: 100vh;
-  background: #FFFFFF;
+  background: #F4F4F5;
+  background-image: radial-gradient(#D4D4D8 1.5px, transparent 1.5px);
+  background-size: 20px 20px;
   display: flex;
   flex-direction: column;
 }
@@ -263,7 +265,7 @@ function retryLoad() {
 .page-header {
   background: #FFFFFF;
   padding: 0 24rpx 16rpx;
-  border-bottom: 1rpx solid #F0F0F0;
+  border-bottom: 3rpx solid #000000;
 }
 
 .status-bar {
@@ -278,22 +280,22 @@ function retryLoad() {
 }
 
 .back-btn {
-  font-size: 56rpx;
+  font-size: 48rpx;
   color: #000000;
+  font-weight: 900;
   line-height: 1;
   padding-right: 8rpx;
 }
 
 .page-title {
   font-size: 40rpx;
-  font-weight: 800;
+  font-weight: 900;
   color: #000000;
 }
 
 /* 筛选栏 */
 .filter-bar {
   padding: 20rpx 24rpx;
-  background: #FFFFFF;
 }
 
 .filter-item {
@@ -304,30 +306,33 @@ function retryLoad() {
 
 .filter-label {
   font-size: 22rpx;
-  font-weight: 600;
+  font-weight: 900;
   color: #999999;
-  letter-spacing: 1rpx;
+  letter-spacing: 2rpx;
   padding-left: 4rpx;
 }
 
 .filter-picker {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  background: #F8F8F8;
-  padding: 20rpx 28rpx;
-  border-radius: 16rpx;
+  gap: 12rpx;
+  background: #000000;
+  padding: 14rpx 28rpx;
+  border-radius: 14rpx;
+  border: 3rpx solid #000000;
+  box-shadow: 3rpx 3rpx 0 #000000;
 }
 
 .filter-value {
-  font-size: 28rpx;
-  color: #333333;
-  font-weight: 600;
+  font-size: 24rpx;
+  color: #FFFFFF;
+  font-weight: 900;
+  letter-spacing: 1rpx;
 }
 
 .filter-arrow {
-  font-size: 22rpx;
-  color: #999999;
+  font-size: 18rpx;
+  color: #FFFFFF;
 }
 
 /* 加载态 */
@@ -343,10 +348,11 @@ function retryLoad() {
 .loading-spinner {
   width: 48rpx;
   height: 48rpx;
-  border: 4rpx solid #EAEAEA;
-  border-top-color: #000000;
+  border: 5rpx solid #F0F0F0;
+  border-top-color: #55EFC4;
+  border-right-color: #55EFC4;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
@@ -355,7 +361,8 @@ function retryLoad() {
 
 .loading-text {
   font-size: 26rpx;
-  color: #888888;
+  color: #999999;
+  font-weight: 700;
 }
 
 /* 内容区 */
@@ -367,12 +374,15 @@ function retryLoad() {
 /* 信息卡片 */
 .info-card {
   margin: 0 24rpx;
-  background: #F8F8F8;
+  background: #FFFFFF;
+  border: 3rpx solid #000000;
   border-radius: 20rpx;
-  padding: 28rpx 32rpx;
+  box-shadow: 4rpx 4rpx 0 #000000;
+  padding: 24rpx 28rpx;
+  margin-right: 30rpx;
   display: flex;
   flex-direction: column;
-  gap: 16rpx;
+  gap: 14rpx;
 }
 
 .info-row {
@@ -384,20 +394,20 @@ function retryLoad() {
 .info-label {
   font-size: 24rpx;
   color: #999999;
-  font-weight: 500;
+  font-weight: 700;
 }
 
 .info-value {
   font-size: 26rpx;
-  color: #333333;
-  font-weight: 600;
+  color: #000000;
+  font-weight: 900;
 }
 
 /* 图例 */
 .legend {
   display: flex;
-  gap: 32rpx;
-  padding: 20rpx 28rpx;
+  gap: 28rpx;
+  padding: 16rpx 28rpx;
   justify-content: center;
 }
 
@@ -411,6 +421,7 @@ function retryLoad() {
   width: 20rpx;
   height: 20rpx;
   border-radius: 4rpx;
+  border: 2rpx solid #000000;
 }
 
 .legend-dot-today {
@@ -427,95 +438,110 @@ function retryLoad() {
 
 .legend-text {
   font-size: 22rpx;
-  color: #999999;
+  color: #000000;
+  font-weight: 700;
 }
 
 /* 校历表格 */
 .calendar-table {
   margin: 0 16rpx 24rpx;
+  border: 2rpx solid #000000;
+  border-radius: 12rpx;
+  overflow: hidden;
+  margin-right: 22rpx;
 }
 
 .cal-row {
   display: flex;
-  border-bottom: 1rpx solid #F5F5F5;
+  border-bottom: 2rpx solid #000000;
+}
+
+.cal-row:last-child {
+  border-bottom: none;
 }
 
 .cal-header {
-  background: #FAFAFA;
-  border-bottom: 2rpx solid #EEEEEE;
+  background: #F3F4F6;
+  border-bottom: 3rpx solid #000000;
 }
 
 .cal-header .cal-cell {
-  font-size: 22rpx;
-  font-weight: 700;
-  color: #999999;
+  font-size: 20rpx;
+  font-weight: 900;
+  color: #000000;
 }
 
 .cal-cell {
   flex: 1;
-  min-height: 64rpx;
+  min-height: 60rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 24rpx;
-  color: #333333;
+  color: #000000;
+  border-right: 1rpx solid #E5E7EB;
+}
+
+.cal-cell:last-child {
+  border-right: none;
 }
 
 .cal-cell-month {
-  flex: 0 0 72rpx;
-  font-size: 20rpx;
-  color: #666666;
-  font-weight: 600;
+  flex: 0 0 68rpx;
+  font-size: 18rpx;
+  color: #000000;
+  font-weight: 900;
+  background: #F9FAFB;
+  border-right: 2rpx solid #000000;
 }
 
 .cal-cell-week {
-  flex: 0 0 88rpx;
-  font-size: 20rpx;
+  flex: 0 0 84rpx;
+  font-size: 18rpx;
   color: #444398;
-  font-weight: 600;
+  font-weight: 900;
+  background: #F9FAFB;
+  border-left: 2rpx solid #000000;
 }
 
 .cal-cell-today {
   background: #FFD460;
-  border-radius: 8rpx;
 }
 
 .cal-cell-holiday {
   background: #FEF1C5;
-  border-radius: 8rpx;
 }
 
 .cal-cell-weekend {
   background: #FFF5F5;
-  border-radius: 8rpx;
 }
 
 .day-text {
-  font-size: 24rpx;
-  font-weight: 500;
-  color: #333333;
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #000000;
 }
 
 .day-text-today {
-  font-weight: 800;
+  font-weight: 900;
   color: #000000;
 }
 
 .day-text-weekend {
   color: #EE4444;
-  font-weight: 600;
+  font-weight: 900;
 }
 
 .month-text {
-  font-size: 20rpx;
-  color: #666666;
-  font-weight: 600;
+  font-size: 18rpx;
+  color: #000000;
+  font-weight: 900;
 }
 
 .week-text {
-  font-size: 20rpx;
+  font-size: 18rpx;
   color: #444398;
-  font-weight: 600;
+  font-weight: 900;
 }
 
 .bottom-spacer {
@@ -535,23 +561,32 @@ function retryLoad() {
 .empty-text-large {
   font-size: 56rpx;
   color: #CCCCCC;
-  font-weight: 300;
+  font-weight: 900;
 }
 
 .empty-text {
   font-size: 28rpx;
-  color: #888888;
+  color: #999999;
+  font-weight: 700;
 }
 
 .retry-btn {
   margin-top: 24rpx;
   padding: 16rpx 48rpx;
   background: #000000;
-  border-radius: 32rpx;
+  border: 3rpx solid #000000;
+  border-radius: 14rpx;
+  box-shadow: 3rpx 3rpx 0 #000000;
+}
+
+.retry-btn:active {
+  transform: translate(2rpx, 2rpx);
+  box-shadow: 1rpx 1rpx 0 #000000;
 }
 
 .retry-text {
   font-size: 28rpx;
   color: #FFFFFF;
+  font-weight: 900;
 }
 </style>

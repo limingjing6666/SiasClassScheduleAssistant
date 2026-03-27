@@ -41,6 +41,61 @@ export function parseNodes(nodes: string): { start: number; step: number } {
 }
 
 /**
+ * 将 weeks 二进制字符串转为可读周次描述
+ * 如 "0111111111111111100" → "1-16"
+ * 如 "0101010101010101000" → "单1-15"
+ * 如 "0010101010101010100" → "双2-16"
+ */
+export function weeksToLabel(weeks: string): string {
+  if (!weeks) return '';
+
+  // 提取有课的周次列表 (1-based)
+  const activeWeeks: number[] = [];
+  for (let i = 1; i < weeks.length; i++) {
+    if (weeks.charAt(i) === '1') {
+      activeWeeks.push(i);
+    }
+  }
+
+  if (activeWeeks.length === 0) return '';
+
+  const first = activeWeeks[0];
+  const last = activeWeeks[activeWeeks.length - 1];
+
+  // 判断是否全连续
+  const total = last - first + 1;
+  if (activeWeeks.length === total) {
+    return `${first}-${last}`;
+  }
+
+  // 判断是否纯单周 (全是奇数)
+  const allOdd = activeWeeks.every(w => w % 2 === 1);
+  if (allOdd) {
+    return `单${first}-${last}`;
+  }
+
+  // 判断是否纯双周 (全是偶数)
+  const allEven = activeWeeks.every(w => w % 2 === 0);
+  if (allEven) {
+    return `双${first}-${last}`;
+  }
+
+  // 其他复杂情况：列出连续区间
+  return `${first}-${last}`;
+}
+
+/**
+ * 获取星期几的中文名
+ */
+export function getDayLabel(day: string): string {
+  const names: Record<string, string> = {
+    '1': '周一', '2': '周二', '3': '周三', '4': '周四',
+    '5': '周五', '6': '周六', '7': '周日'
+  };
+  return names[day] || '';
+}
+
+/**
  * 根据周次过滤课程
  * @param courses 课程列表
  * @param currentWeek 当前周次 (1-based)

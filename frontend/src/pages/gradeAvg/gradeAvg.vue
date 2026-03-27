@@ -141,15 +141,17 @@ async function loadData() {
 <style scoped>
 .page {
   min-height: 100vh;
-  background: #F5F7FA;
+  background: #F4F4F5;
+  background-image: radial-gradient(#D4D4D8 1.5px, transparent 1.5px);
+  background-size: 20px 20px;
   display: flex;
   flex-direction: column;
 }
 
 .page-header {
   background: #FFFFFF;
-  padding: 32rpx;
-  box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.05);
+  padding: 0 24rpx 16rpx;
+  border-bottom: 3rpx solid #000000;
 }
 
 .status-bar {
@@ -160,19 +162,20 @@ async function loadData() {
   display: flex;
   align-items: center;
   gap: 16rpx;
-  margin-top: 16rpx;
+  padding: 16rpx 0 8rpx;
 }
 
 .back-btn {
-  font-size: 56rpx;
+  font-size: 48rpx;
   color: #000000;
+  font-weight: 900;
   line-height: 1;
   padding-right: 8rpx;
 }
 
 .page-title {
   font-size: 40rpx;
-  font-weight: 800;
+  font-weight: 900;
   color: #000000;
 }
 
@@ -189,10 +192,11 @@ async function loadData() {
 .loading-spinner {
   width: 48rpx;
   height: 48rpx;
-  border: 4rpx solid #EAEAEA;
-  border-top-color: #000000;
+  border: 5rpx solid #F0F0F0;
+  border-top-color: #55EFC4;
+  border-right-color: #55EFC4;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
@@ -201,46 +205,50 @@ async function loadData() {
 
 .loading-text {
   font-size: 26rpx;
-  color: #888888;
+  color: #999999;
+  font-weight: 700;
 }
 
 /* 内容区 */
 .content {
   flex: 1;
-  padding: 32rpx;
+  padding: 24rpx;
   box-sizing: border-box;
 }
 
 /* 卡片 */
 .avg-card {
   background: #FFFFFF;
-  border-radius: 32rpx;
-  padding: 40rpx 32rpx;
-  margin-bottom: 32rpx;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+  border: 3rpx solid #000000;
+  border-radius: 24rpx;
+  box-shadow: 4rpx 4rpx 0 #000000;
+  padding: 32rpx 28rpx;
+  margin-bottom: 28rpx;
+  margin-right: 6rpx;
   box-sizing: border-box;
   overflow: hidden;
 }
 
 .card-badge {
   display: inline-flex;
-  background: #F0F0F0;
+  background: #FFEAA7;
+  border: 2rpx solid #000000;
   border-radius: 8rpx;
-  padding: 6rpx 20rpx;
-  margin-bottom: 32rpx;
+  padding: 6rpx 18rpx;
+  margin-bottom: 28rpx;
 }
 
 .badge-text {
-  font-size: 24rpx;
-  color: #666666;
-  font-weight: 500;
+  font-size: 22rpx;
+  color: #000000;
+  font-weight: 900;
 }
 
 /* 分数区 */
 .card-score-row {
   display: flex;
   justify-content: center;
-  margin-bottom: 40rpx;
+  margin-bottom: 32rpx;
 }
 
 .score-block {
@@ -251,14 +259,15 @@ async function loadData() {
 
 .score-number {
   font-size: 80rpx;
-  font-weight: 800;
-  color: #1a1a1a;
+  font-weight: 900;
+  color: #000000;
   line-height: 1.1;
 }
 
 .score-label {
-  font-size: 24rpx;
-  color: #888888;
+  font-size: 22rpx;
+  color: #999999;
+  font-weight: 700;
   margin-top: 8rpx;
 }
 
@@ -267,10 +276,11 @@ async function loadData() {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 48rpx;
-  margin-bottom: 40rpx;
-  padding: 28rpx 0;
-  background: #FAFAFB;
+  gap: 40rpx;
+  margin-bottom: 32rpx;
+  padding: 24rpx 0;
+  background: #F9FAFB;
+  border: 2rpx solid #000000;
   border-radius: 16rpx;
 }
 
@@ -282,44 +292,47 @@ async function loadData() {
 }
 
 .rank-value {
-  font-size: 48rpx;
-  font-weight: 700;
-  color: #1a1a1a;
+  font-size: 44rpx;
+  font-weight: 900;
+  color: #000000;
 }
 
 .rank-label {
-  font-size: 22rpx;
-  color: #888888;
+  font-size: 20rpx;
+  color: #999999;
+  font-weight: 700;
   margin-top: 4rpx;
 }
 
 .rank-divider {
-  width: 2rpx;
-  height: 64rpx;
-  background: #E0E0E0;
+  width: 3rpx;
+  height: 56rpx;
+  background: #000000;
 }
 
 /* 信息区 */
 .card-info {
-  border-top: 2rpx solid #F0F0F0;
-  padding-top: 24rpx;
+  border-top: 2rpx dashed #E5E7EB;
+  padding-top: 20rpx;
 }
 
 .info-row {
   display: flex;
   justify-content: space-between;
-  padding: 12rpx 0;
+  padding: 10rpx 0;
 }
 
 .info-label {
-  font-size: 26rpx;
-  color: #888888;
+  font-size: 24rpx;
+  color: #999999;
+  font-weight: 700;
   flex-shrink: 0;
 }
 
 .info-value {
-  font-size: 26rpx;
-  color: #333333;
+  font-size: 24rpx;
+  color: #000000;
+  font-weight: 700;
   text-align: right;
   flex: 1;
   margin-left: 24rpx;
@@ -334,6 +347,7 @@ async function loadData() {
 .tip-text {
   font-size: 22rpx;
   color: #999999;
+  font-weight: 700;
   line-height: 1.6;
 }
 
@@ -353,18 +367,27 @@ async function loadData() {
 
 .empty-text {
   font-size: 28rpx;
-  color: #888888;
+  color: #999999;
+  font-weight: 700;
 }
 
 .retry-btn {
   margin-top: 24rpx;
   padding: 16rpx 48rpx;
   background: #000000;
-  border-radius: 32rpx;
+  border: 3rpx solid #000000;
+  border-radius: 14rpx;
+  box-shadow: 3rpx 3rpx 0 #000000;
+}
+
+.retry-btn:active {
+  transform: translate(2rpx, 2rpx);
+  box-shadow: 1rpx 1rpx 0 #000000;
 }
 
 .retry-text {
   font-size: 28rpx;
   color: #FFFFFF;
+  font-weight: 900;
 }
 </style>

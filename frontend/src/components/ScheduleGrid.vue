@@ -47,10 +47,16 @@
           @click="onCourseClick(course)"
         >
           <view class="course-inner">
-            <text class="course-name">{{ course.name }}</text>
-            <view class="course-tag">
-              <text class="course-tag-text">{{ roomShortMap[index] }}</text>
-            </view>
+            <template v-if="detailMode">
+              <text class="course-name-detail">{{ course.name }} ({{ course.teacher }})</text>
+              <text class="course-detail-text">({{ detailMap[index] }})</text>
+            </template>
+            <template v-else>
+              <text class="course-name">{{ course.name }}</text>
+              <view class="course-tag">
+                <text class="course-tag-text">{{ roomShortMap[index] }}</text>
+              </view>
+            </template>
           </view>
         </view>
       </view>
@@ -62,23 +68,34 @@
 import { computed } from 'vue';
 import type { RenderCourse } from '@/types';
 import { COURSE_THEMES } from '@/config/themes';
-import { NODE_TIMES } from '@/utils/schedule';
+import { NODE_TIMES, weeksToLabel, getDayLabel } from '@/utils/schedule';
 
 const props = withDefaults(defineProps<{
   courses: RenderCourse[];
   highlightToday?: boolean;
   showDates?: boolean;
+  detailMode?: boolean;
   semesterStart?: string;
   currentWeek?: number;
 }>(), {
   highlightToday: false,
   showDates: false,
+  detailMode: false,
   currentWeek: 1
 });
 
 const emit = defineEmits<{
   (e: 'course-click', course: RenderCourse): void;
 }>();
+
+const detailMap = computed(() => {
+  return props.courses.map(c => {
+    const wl = weeksToLabel(c.weeks);
+    const dl = getDayLabel(c.day);
+    const room = c.room || '';
+    return `${wl},${dl},${c.nodes}节,${room}`;
+  });
+});
 
 const roomShortMap = computed(() => {
   return props.courses.map(c => {
@@ -332,5 +349,23 @@ function onCourseClick(course: RenderCourse) {
   opacity: 0.7;
   word-break: break-all;
   line-height: 1.2;
+}
+
+/* 历史课表详细模式 */
+.course-name-detail {
+  font-size: 18rpx;
+  font-weight: 700;
+  line-height: 1.25;
+  word-break: break-all;
+  overflow: hidden;
+}
+
+.course-detail-text {
+  font-size: 16rpx;
+  font-weight: 600;
+  line-height: 1.2;
+  word-break: break-all;
+  opacity: 0.75;
+  margin-top: 4rpx;
 }
 </style>

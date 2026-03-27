@@ -43,7 +43,7 @@ function switchTo(tab: string) {
   if (tab === props.current) return;
   const url = PAGE_MAP[tab];
   if (!url) return;
-  uni.switchTab({ url });
+  uni.reLaunch({ url });
 }
 </script>
 
@@ -55,9 +55,9 @@ function switchTo(tab: string) {
   right: 0;
   z-index: 999;
   background: #FFFFFF;
-  border-top: 4rpx solid #000000;
-  padding: 8rpx 48rpx 0;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  border-top: 2rpx solid #000000;
+  padding: 6rpx 48rpx 0;
+  /* safe-area 仅留最小值，避免底部大量留白 */
   box-sizing: border-box;
 }
 
@@ -77,19 +77,19 @@ function switchTo(tab: string) {
 
 /* 图标容器 */
 .tab-icon-box {
-  width: 64rpx;
-  height: 64rpx;
+  width: 56rpx;
+  height: 56rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 24rpx;
-  border: 4rpx solid transparent;
+  border: 3rpx solid transparent;
   transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .tab-svg {
-  width: 36rpx;
-  height: 36rpx;
+  width: 32rpx;
+  height: 32rpx;
   opacity: 0.35;
   transition: opacity 0.2s ease;
 }
@@ -97,8 +97,8 @@ function switchTo(tab: string) {
 /* 激活态 */
 .tab-icon-active {
   border-color: #000000;
-  box-shadow: 4rpx 4rpx 0 #000000;
-  transform: translateY(-8rpx) scale(1.05);
+  box-shadow: 3rpx 3rpx 0 #000000;
+  transform: translateY(-6rpx) scale(1.05);
 }
 
 .tab-icon-active .tab-svg {
@@ -111,11 +111,11 @@ function switchTo(tab: string) {
 
 /* 标签 */
 .tab-label {
-  font-size: 20rpx;
+  font-size: 18rpx;
   font-weight: 600;
   color: #BBBBBB;
   transition: all 0.2s ease;
-  margin-bottom: 4rpx;
+  margin-bottom: 2rpx;
 }
 
 .label-active {

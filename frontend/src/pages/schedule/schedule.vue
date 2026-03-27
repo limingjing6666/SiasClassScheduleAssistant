@@ -185,8 +185,7 @@ async function handlePullDownRefresh() {
     console.log('[Schedule] cachedUser:', cachedUser);
     
     if (!cachedUser) {
-      console.log('[Schedule] No cached user found');
-      uni.showToast({ title: '请先登录', icon: 'none' });
+      console.log('[Schedule] No cached user found, skipping refresh');
       return;
     }
     
@@ -194,8 +193,7 @@ async function handlePullDownRefresh() {
     const password = readPassword(storedPwd, username);
     
     if (!username || !password) {
-      console.log('[Schedule] Missing username or password');
-      uni.showToast({ title: '请先登录', icon: 'none' });
+      console.log('[Schedule] Missing username or password, skipping refresh');
       return;
     }
 
@@ -238,22 +236,21 @@ onPullDownRefresh(() => {
 </script>
 
 <style scoped>
-/* 极简网格课表样式 (Minimalist UI) */
+/* 漫画风课表 */
 .schedule-page {
   display: flex;
   flex-direction: column;
   height: 100vh;
   background: #FFFFFF;
   color: #000000;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 .header {
   background: #FFFFFF;
-  padding: 0 24rpx 16rpx;
+  padding: 0 24rpx 12rpx;
   position: relative;
   z-index: 10;
-  border-bottom: 1rpx solid #F0F0F0;
+  border-bottom: 3rpx solid #000000;
 }
 
 .status-bar {
@@ -264,7 +261,7 @@ onPullDownRefresh(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16rpx 0 8rpx;
+  padding: 12rpx 0 8rpx;
 }
 
 .header-title {
@@ -277,82 +274,94 @@ onPullDownRefresh(() => {
 .header-controls {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 12rpx;
 }
 
+/* 本周按钮 - 漫画风 */
 .this-week-btn {
-  height: 56rpx;
-  padding: 0 28rpx;
+  height: 52rpx;
+  padding: 0 24rpx;
   background: #000000;
-  border-radius: 999rpx;
+  border: 3rpx solid #000000;
+  border-radius: 14rpx;
+  box-shadow: 3rpx 3rpx 0 #000000;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.this-week-btn:active {
+  transform: translate(2rpx, 2rpx);
+  box-shadow: 1rpx 1rpx 0 #000000;
 }
 
 .this-week-text {
   font-size: 22rpx;
   color: #FFFFFF;
-  font-weight: 700;
-  letter-spacing: 2rpx;
+  font-weight: 900;
+  letter-spacing: 3rpx;
 }
 
+/* 周切换器 - 漫画风 */
 .week-capsule {
   display: flex;
   align-items: center;
-  background: #F5F5F5;
-  border-radius: 999rpx;
-  padding: 4rpx;
-  border: 1rpx solid rgba(0, 0, 0, 0.04);
+  background: #FFFFFF;
+  border: 3rpx solid #000000;
+  border-radius: 14rpx;
+  box-shadow: 3rpx 3rpx 0 #000000;
+  padding: 2rpx;
 }
 
 .capsule-arrow {
-  width: 48rpx;
-  height: 48rpx;
+  width: 44rpx;
+  height: 44rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999rpx;
+  border-radius: 10rpx;
 }
 
 .capsule-arrow:active {
-  background: #FFFFFF;
+  background: #F3F4F6;
 }
 
 .arrow-text {
   font-size: 32rpx;
-  color: #999999;
-  font-weight: 600;
+  color: #000000;
+  font-weight: 900;
   line-height: 1;
 }
 
 .capsule-week {
-  font-size: 26rpx;
-  font-weight: 700;
+  font-size: 24rpx;
+  font-weight: 900;
   color: #000000;
-  padding: 0 8rpx;
+  padding: 0 6rpx;
   white-space: nowrap;
 }
 
+/* 同步行 */
 .sync-row {
   display: flex;
   align-items: center;
-  padding: 4rpx 0;
+  padding: 6rpx 0 2rpx;
 }
 
 .sync-dot {
-  width: 12rpx;
-  height: 12rpx;
-  border-radius: 999rpx;
-  background: #34D399;
-  margin-right: 12rpx;
-  box-shadow: 0 0 16rpx rgba(52, 211, 153, 0.5);
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  background: #55EFC4;
+  border: 2rpx solid #000000;
+  margin-right: 10rpx;
 }
 
 .sync-text {
   font-size: 20rpx;
   color: #999999;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .grid-wrapper {
@@ -362,7 +371,7 @@ onPullDownRefresh(() => {
   overflow: hidden;
 }
 
-/* 骨架屏（仅 schedule 页使用） */
+/* 骨架屏 */
 .skeleton-container {
   flex: 1;
   overflow: hidden;
@@ -386,5 +395,4 @@ onPullDownRefresh(() => {
 .grid-column {
   flex: 1;
 }
-
 </style>

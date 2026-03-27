@@ -124,28 +124,7 @@
       }
     }
   ],
-  "tabBar": {
-    "custom": true,
-    "color": "#999999",
-    "selectedColor": "#000000",
-    "backgroundColor": "#FFFFFF",
-    "borderStyle": "white",
-    "height": "0px",
-    "list": [
-      {
-        "pagePath": "pages/schedule/schedule",
-        "text": ""
-      },
-      {
-        "pagePath": "pages/score/score",
-        "text": ""
-      },
-      {
-        "pagePath": "pages/more/more",
-        "text": ""
-      }
-    ]
-  },
+  
   "globalStyle": {
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "西亚斯课表",
