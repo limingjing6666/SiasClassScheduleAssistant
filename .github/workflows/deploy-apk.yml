@@ -65,6 +65,9 @@ jobs:
           # --- 【新增】自动生成 update.json ---
           echo "🛠 正在生成 update.json..."
           VERSION_NAME=$(echo ${{ steps.tag.outputs.TAG }} | sed 's/v//')
+          APK_FILENAME="${{ secrets.APK_FILENAME }}"
+          APK_FILENAME="${APK_FILENAME:-西亚斯课表助手.apk}"
+          ENCODED_APK_FILENAME=$(python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$APK_FILENAME")
           # 自动转换版本号逻辑: v1.0.4 -> 1.0.4 -> 104
           V_MAJOR=$(echo $VERSION_NAME | cut -d. -f1)
           V_MINOR=$(echo $VERSION_NAME | cut -d. -f2)
@@ -80,7 +83,7 @@ jobs:
             "versionCode": ${VERSION_CODE},
             "versionName": "${VERSION_NAME}",
             "updateLog": $(jq -n --arg str "$RELEASE_NOTES" '$str'),
-            "url": "http://limingjing.codes/app/%E8%A5%BF%E4%BA%9A%E6%96%AF%E8%AF%BE%E8%A1%A8%E5%8A%A9%E6%89%8B.apk"
+            "url": "http://limingjing.codes/app/${ENCODED_APK_FILENAME}"
           }
           EOF
           echo "✅ 已生成 update.json:"
