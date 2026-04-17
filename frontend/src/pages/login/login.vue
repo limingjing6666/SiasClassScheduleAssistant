@@ -97,6 +97,7 @@
       <view class="splash-bar-track">
         <view class="splash-bar-fill" :style="{ width: progress + '%' }"></view>
       </view>
+
     </view>
 
   </view>
@@ -107,6 +108,7 @@ import { ref, computed } from 'vue';
 import { syncSchedule } from '@/api/schedule';
 import { useScheduleStore } from '@/stores/schedule';
 import { encryptPassword } from '@/utils/crypto';
+import { scheduleCachedTodayReminders } from '@/utils/reminder';
 
 const username = ref('');
 const password = ref('');
@@ -153,6 +155,8 @@ async function handleLogin() {
       password: encryptPassword(password.value, username.value.trim()),
       lastSyncAt: new Date().toISOString()
     });
+
+    await scheduleCachedTodayReminders(scheduleStore.currentWeek);
 
     // 保持 loading 状态直到跳转，避免表单闪现
     setTimeout(() => {

@@ -38,7 +38,7 @@ import { ref } from 'vue';
 import { onLaunch, onShow, onHide } from '@dcloudio/uni-app';
 import { checkUpdate, onDownloadProgress } from '@/utils/update';
 import { useScheduleStore } from '@/stores/schedule';
-import { scheduleTodayReminders } from '@/utils/reminder';
+import { scheduleCachedTodayReminders } from '@/utils/reminder';
 import {
   shouldShowPermissionModal,
   onPermissionConfirm,
@@ -65,7 +65,7 @@ function onPermConfirm() {
   setTimeout(async () => {
     const hasPermission = await checkNotificationPermission();
     if (hasPermission) {
-      tryScheduleReminders();
+      await tryScheduleReminders();
     }
   }, 3000);
 }
@@ -75,17 +75,9 @@ function onPermCancel() {
   onPermissionCancel();
 }
 
-function tryScheduleReminders() {
-  const cachedCourses = uni.getStorageSync('courses');
-  if (!cachedCourses) return;
-  try {
-    const courses = JSON.parse(cachedCourses);
-    const currentWeek = scheduleStore.currentWeek;
-    const count = scheduleTodayReminders(courses, currentWeek);
-    console.log('[App] Scheduled', count, 'reminders');
-  } catch (e) {
-    console.error('[App] 设置提醒失败:', e);
-  }
+async function tryScheduleReminders() {
+  const result = await scheduleCachedTodayReminders(scheduleStore.currentWeek);
+  console.log('[App] Reminder schedule result:', result.status, result.count);
 }
 
 onLaunch(async () => {
@@ -120,13 +112,7 @@ onLaunch(async () => {
     // 已有权限，设置今日提醒
     const hasPermission = await checkNotificationPermission();
     if (hasPermission && cachedCourses) {
-      try {
-        const courses = JSON.parse(cachedCourses);
-        const currentWeek = scheduleStore.currentWeek;
-        scheduleTodayReminders(courses, currentWeek);
-      } catch (e) {
-        console.error('[App] 设置提醒失败:', e);
-      }
+      await tryScheduleReminders();
     }
   }
   // #endif
@@ -134,6 +120,7 @@ onLaunch(async () => {
 
 onShow(() => {
   console.log('App Show');
+  void tryScheduleReminders();
 });
 
 onHide(() => {

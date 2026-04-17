@@ -55,7 +55,8 @@
 import { computed } from 'vue';
 import { useScheduleStore } from '@/stores/schedule';
 import { ADVANCE_OPTIONS } from '@/config/reminder';
-import { scheduleTodayReminders, clearAllNotifications } from '@/utils/reminder';
+import { scheduleCachedTodayReminders, clearAllNotifications } from '@/utils/reminder';
+import { openAppSettings } from '@/utils/permission';
 
 const scheduleStore = useScheduleStore();
 const settings = computed(() => scheduleStore.reminderSettings);
@@ -69,39 +70,73 @@ function goBack() {
   uni.navigateBack();
 }
 
-function updateSettings(partial: Record<string, boolean | number>) {
+async function updateSettings(partial: Record<string, boolean | number>, showFeedback = false) {
   const newSettings = { ...settings.value, ...partial };
   scheduleStore.setReminderSettings(newSettings);
-  reschedule(newSettings.enabled);
+  await reschedule(newSettings.enabled, showFeedback);
 }
 
-function reschedule(enabled: boolean) {
+async function reschedule(enabled: boolean, showFeedback = false) {
   if (!enabled) {
     clearAllNotifications();
+    if (showFeedback) {
+      uni.showToast({ title: '已关闭提醒', icon: 'none' });
+    }
     return;
   }
-  const cachedCourses = uni.getStorageSync('courses');
-  if (cachedCourses) {
-    try {
-      const courses = JSON.parse(cachedCourses);
-      scheduleTodayReminders(courses, scheduleStore.currentWeek);
-    } catch { /* ignore */ }
+
+  const result = await scheduleCachedTodayReminders(scheduleStore.currentWeek);
+  if (!showFeedback) {
+    return;
   }
+
+  if (result.status === 'scheduled') {
+    uni.showToast({ title: `已设置${result.count}个提醒`, icon: 'none' });
+    return;
+  }
+
+  if (result.status === 'no_courses') {
+    uni.showToast({ title: '今日暂无可提醒课程', icon: 'none' });
+    return;
+  }
+
+  if (result.status === 'unsupported') {
+    uni.showToast({ title: '仅 App 支持课前提醒', icon: 'none' });
+    return;
+  }
+
+  if (result.status === 'no_permission') {
+    uni.showModal({
+      title: '通知权限未开启',
+      content: '请先在系统设置中开启通知权限，否则课前提醒无法触发。',
+      confirmText: '去开启',
+      success: (modalRes) => {
+        if (modalRes.confirm) {
+          openAppSettings();
+        }
+      }
+    });
+    return;
+  }
+
+  if (result.status === 'no_cache') {
+    uni.showToast({ title: '请先同步课表', icon: 'none' });
+    return;
+  }
+
+  uni.showToast({ title: '提醒设置失败', icon: 'none' });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- uni-app switch event
-function onToggleEnabled(e: any) {
-  updateSettings({ enabled: e.detail.value });
+async function onToggleEnabled(e: any) {
+  await updateSettings({ enabled: e.detail.value }, true);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function onToggleSound(e: any) {
-  updateSettings({ sound: e.detail.value });
+async function onToggleSound(e: any) {
+  await updateSettings({ sound: e.detail.value });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function onToggleVibration(e: any) {
-  updateSettings({ vibration: e.detail.value });
+async function onToggleVibration(e: any) {
+  await updateSettings({ vibration: e.detail.value });
 }
 
 function showAdvancePicker() {
@@ -109,7 +144,7 @@ function showAdvancePicker() {
   uni.showActionSheet({
     itemList: items,
     success: (res) => {
-      updateSettings({ advanceMinutes: ADVANCE_OPTIONS[res.tapIndex].value });
+      void updateSettings({ advanceMinutes: ADVANCE_OPTIONS[res.tapIndex].value }, true);
     }
   });
 }

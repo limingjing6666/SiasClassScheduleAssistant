@@ -7,6 +7,21 @@ import type { Course } from '@/types';
 import type { ReminderSettings, ReminderTask } from '@/types/reminder';
 import { NODE_TIMES } from '@/utils/schedule';
 import { DEFAULT_REMINDER_SETTINGS, REMINDER_CACHE_KEY, NOTIFICATION_IDS_KEY } from '@/config/reminder';
+import { checkNotificationPermission } from '@/utils/permission';
+
+export type ReminderScheduleStatus =
+  | 'scheduled'
+  | 'disabled'
+  | 'no_courses'
+  | 'no_cache'
+  | 'parse_error'
+  | 'no_permission'
+  | 'unsupported';
+
+export interface ReminderScheduleResult {
+  status: ReminderScheduleStatus;
+  count: number;
+}
 
 /** 简单字符串哈希 → 数值 */
 function hashCode(str: string): number {
@@ -38,6 +53,45 @@ export function getReminderSettings(): ReminderSettings {
  */
 export function saveReminderSettings(settings: ReminderSettings): void {
   uni.setStorageSync(REMINDER_CACHE_KEY, JSON.stringify(settings));
+}
+
+export async function scheduleCachedTodayReminders(currentWeek: number): Promise<ReminderScheduleResult> {
+  const settings = getReminderSettings();
+  if (!settings.enabled) {
+    return { status: 'disabled', count: 0 };
+  }
+
+  // #ifndef APP-PLUS
+  return { status: 'unsupported', count: 0 };
+  // #endif
+
+  // #ifdef APP-PLUS
+  const hasPermission = await checkNotificationPermission();
+  if (!hasPermission) {
+    return { status: 'no_permission', count: 0 };
+  }
+
+  const cachedCourses = uni.getStorageSync('courses');
+  if (!cachedCourses) {
+    return { status: 'no_cache', count: 0 };
+  }
+
+  try {
+    const courses = JSON.parse(cachedCourses);
+    const todayCourses = getTodayCourses(courses, currentWeek);
+
+    if (todayCourses.length === 0) {
+      clearAllNotifications();
+      return { status: 'no_courses', count: 0 };
+    }
+
+    const count = scheduleTodayReminders(courses, currentWeek);
+    return { status: count > 0 ? 'scheduled' : 'no_courses', count };
+  } catch (e) {
+    console.error('[Reminder] 解析课程缓存失败:', e);
+    return { status: 'parse_error', count: 0 };
+  }
+  // #endif
 }
 
 /**

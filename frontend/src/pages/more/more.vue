@@ -129,6 +129,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import manifest from '@/manifest.json';
 import { useScheduleStore } from '@/stores/schedule';
 import { clearSession } from '@/utils/session';
 import { fetchProfile, getCachedProfile } from '@/utils/profile';
@@ -138,7 +139,7 @@ import MangaModal from '@/components/MangaModal.vue';
 
 const scheduleStore = useScheduleStore();
 
-const APP_VERSION = '1.0.18';
+const FALLBACK_APP_VERSION = manifest.versionName;
 const appVersion = ref('');
 const profileName = ref('');
 const studentId = ref('');
@@ -160,14 +161,14 @@ onMounted(async () => {
   try {
     const appid = plus.runtime.appid || '';
     plus.runtime.getProperty(appid, (info) => {
-      appVersion.value = (info as Record<string, string>).versionName || APP_VERSION;
+      appVersion.value = (info as Record<string, string>).versionName || FALLBACK_APP_VERSION;
     });
   } catch {
-    appVersion.value = APP_VERSION;
+    appVersion.value = FALLBACK_APP_VERSION;
   }
   // #endif
   // #ifndef APP-PLUS
-  appVersion.value = APP_VERSION;
+  appVersion.value = FALLBACK_APP_VERSION;
   // #endif
 });
 

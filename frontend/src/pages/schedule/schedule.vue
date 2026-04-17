@@ -77,6 +77,7 @@ import { onPullDownRefresh } from '@dcloudio/uni-app';
 import { useScheduleStore } from '@/stores/schedule';
 import { syncSchedule } from '@/api/schedule';
 import { readPassword, encryptPassword } from '@/utils/crypto';
+import { scheduleCachedTodayReminders } from '@/utils/reminder';
 import type { RenderCourse } from '@/types';
 
 import CourseDetailModal from '@/components/CourseDetailModal.vue';
@@ -214,6 +215,7 @@ async function handlePullDownRefresh() {
       lastSyncAt: new Date().toISOString()
     };
     scheduleStore.setUserInfo(newUserInfo);
+    await scheduleCachedTodayReminders(scheduleStore.currentWeek);
     console.log('[Schedule] userInfo updated:', newUserInfo);
     
     showRefreshToast.value = true;
