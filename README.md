@@ -2,10 +2,11 @@
  * @Author: limingjing6666 limingjing6868@gmail.com
  * @Date: 2026-03-23 14:10:05
  * @LastEditors: limingjing6666 limingjing6868@gmail.com
- * @LastEditTime: 2026-03-23 14:16:17
+ * @LastEditTime: 2026-04-17 12:57:14
  * @FilePath: \SiasClassScheduleAssistant\README.md
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 -->
+
 # 🎓 西亚斯课表 (Sias Schedule)
 
 > **极致极简 · 隐私至上 · 原生体验**
