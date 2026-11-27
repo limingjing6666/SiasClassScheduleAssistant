@@ -1,138 +1,66 @@
-name: Deploy APK to Server
+name: Verify Release on Cloudflare
 
-# 触发条件：
-# 1. 创建 Release 时自动触发
-# 2. 手动触发（workflow_dispatch）
+# 说明：
+# 原 VPS 服务器已停用，应用更新元数据 (/app/update.json) 与 APK 流式下载
+# 现已迁移至 Cloudflare Worker (sias-schedule-update) 直接托管于 limingjing.codes。
+# 每次发布 GitHub Release 后，Worker 会在 5 分钟缓存周期内自动同步最新版本，
+# 本工作流仅负责校验新版本 APK 资产及 Cloudflare 分发链路是否可用。
+
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: '要部署的 Release tag（如 v1.0.1）'
+        description: '要校验的 Release tag（如 v1.0.22）'
         required: true
         type: string
 
-# ────────────────────────────────────────────────
-# 需要配置的 GitHub Secrets（在仓库 Settings → Secrets）:
-#
-#   DEPLOY_HOST     服务器IP（如 165.22.240.99）
-#   DEPLOY_USER     SSH用户名（如 root）
-#   DEPLOY_KEY      SSH私钥（id_rsa 的完整内容）
-#   DEPLOY_PATH     APK部署路径（如 /var/www/html/app）
-#   APK_FILENAME    APK文件名（如 西亚斯课表助手.apk）
-# ────────────────────────────────────────────────
-
 jobs:
-  deploy:
-    name: 部署 APK 到服务器
+  verify:
+    name: 校验 Cloudflare 更新分发链路
     runs-on: ubuntu-latest
 
     steps:
-      - name: 确定 Release Tag
-        id: tag
-        run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            echo "TAG=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
-          else
-            echo "TAG=${{ inputs.tag }}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: 从 Release 下载 APK
+      - name: 确定 Release Tag 与 APK 资产名
+        id: meta
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # 核心修复：显式指定仓库，避免 gh 报错寻找 .git 文件夹
-          GH_REPO: ${{ github.repository }} 
+          GH_REPO: ${{ github.repository }}
         run: |
-          echo "📦 正在从 Release ${{ steps.tag.outputs.TAG }} 下载 APK..."
-          gh release download "${{ steps.tag.outputs.TAG }}" \
-            --pattern "*.apk" \
-            --dir ./apk-download
-          
-          # 列出下载到的文件
-          echo "下载的文件:"
-          ls -la ./apk-download/
-          
-          # 找到 APK 文件
-          APK_FILE=$(find ./apk-download -name "*.apk" | head -1)
-          if [ -z "$APK_FILE" ]; then
-            echo "❌ 未找到 APK 文件！请确认 Release 中包含 .apk 文件"
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG="${{ inputs.tag }}"
+          fi
+          echo "TAG=${TAG}" >> "$GITHUB_OUTPUT"
+
+          APK_NAME=$(gh release view "$TAG" --json assets -q '.assets[] | select(.name | endswith(".apk")) | .name' | head -n 1)
+          if [ -z "$APK_NAME" ]; then
+            echo "❌ Release ${TAG} 中未找到 .apk 资产"
             exit 1
           fi
-          echo "APK_FILE=$APK_FILE" >> $GITHUB_ENV
-          echo "✅ 找到 APK: $APK_FILE"
+          echo "APK_NAME=${APK_NAME}" >> "$GITHUB_OUTPUT"
+          echo "✅ 检测到资产: ${APK_NAME}"
 
-          # --- 【新增】自动生成 update.json ---
-          echo "🛠 正在生成 update.json..."
-          VERSION_NAME=$(echo ${{ steps.tag.outputs.TAG }} | sed 's/v//')
-          DEPLOYED_APK_FILENAME=$(basename "$APK_FILE")
-          ENCODED_APK_FILENAME=$(python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$DEPLOYED_APK_FILENAME")
-          # 自动转换版本号逻辑: v1.0.4 -> 1.0.4 -> 104
-          V_MAJOR=$(echo $VERSION_NAME | cut -d. -f1)
-          V_MINOR=$(echo $VERSION_NAME | cut -d. -f2)
-          V_PATCH=$(echo $VERSION_NAME | cut -d. -f3)
-          VERSION_CODE=$((V_MAJOR * 10000 + V_MINOR * 100 + V_PATCH))
-          
-          # 抓取当前 Release 的 Release Notes
-          RELEASE_NOTES=$(gh release view "${{ steps.tag.outputs.TAG }}" --json body -q '.body')
-          
-          # 构建配置文件
-          cat <<EOF > ./apk-download/update.json
-          {
-            "versionCode": ${VERSION_CODE},
-            "versionName": "${VERSION_NAME}",
-            "updateLog": $(jq -n --arg str "$RELEASE_NOTES" '$str'),
-            "url": "http://limingjing.codes/app/${ENCODED_APK_FILENAME}"
-          }
-          EOF
-          echo "✅ 已生成 update.json:"
-          cat ./apk-download/update.json
-
-      - name: 部署到服务器
-        env:
-          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      - name: 校验 Cloudflare 分发端点
         run: |
-          # 设置 SSH 密钥
-          mkdir -p ~/.ssh
-          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-          
-          # 设置默认值
-          DEPLOY_PATH="${DEPLOY_PATH:-/var/www/html/app}"
-          DEPLOYED_APK_FILENAME=$(basename "$APK_FILE")
-          
-          echo "🚀 正在上传到 ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/${DEPLOYED_APK_FILENAME}..."
-          
-          # 确保远程目录存在
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "mkdir -p '${DEPLOY_PATH}'"
-          
-          # 上传 APK（先传到临时文件，再原子性移动）
-          REMOTE_TMP="${DEPLOY_PATH}/.apk-uploading.tmp"
-          REMOTE_DEST="${DEPLOY_PATH}/${DEPLOYED_APK_FILENAME}"
-          
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            "$APK_FILE" \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_TMP}"
-          
-          # 【新增】上传 update.json
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            "./apk-download/update.json" \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/update.json"
-          
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "mv '${REMOTE_TMP}' '${REMOTE_DEST}' && echo '✅ 部署成功: ${REMOTE_DEST}'"
+          APK_NAME="${{ steps.meta.outputs.APK_NAME }}"
+          ENCODED_APK=$(python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$APK_NAME")
+          APK_URL="https://limingjing.codes/app/${ENCODED_APK}"
+          UPDATE_URL="https://limingjing.codes/app/update.json"
 
-      - name: 部署完成通知
-        if: success()
-        run: |
-          echo "============================================"
-          echo "✅ APK 已成功部署到服务器！"
-          echo "   版本: ${{ steps.tag.outputs.TAG }}"
-          echo "============================================"
+          echo "🔎 检查更新元数据接口: ${UPDATE_URL}"
+          curl -fsSL --retry 3 --retry-delay 5 "${UPDATE_URL}" | tee /tmp/update.json
+          echo ""
+          jq -e '.versionCode and .versionName and .url' /tmp/update.json >/dev/null
+
+          echo "🔎 检查 APK 流式分发接口: ${APK_URL}"
+          HTTP_CODE=$(curl -sSI --retry 3 --retry-delay 5 -o /tmp/apk_headers.txt -w '%{http_code}' "${APK_URL}")
+          cat /tmp/apk_headers.txt
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ APK 代理返回非 200 状态码: ${HTTP_CODE}"
+            exit 1
+          fi
+
+          echo "✅ Cloudflare 分发校验通过（update.json 边缘缓存最长 5 分钟内自动刷新为 ${{ steps.meta.outputs.TAG }}）"

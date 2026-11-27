@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     One-click release APK: Create GitHub Release, upload APK, and trigger server deployment.
 
@@ -193,7 +193,7 @@ Write-Host ""
 Write-Host "========================================" -ForegroundColor DarkGray
 Write-Host "  [APK]    $(Split-Path $ApkPath -Leaf)" -ForegroundColor White
 Write-Host "  [VERSION]   $Tag" -ForegroundColor White
-Write-Host "  [DEPLOY] GitHub Actions auto-deploying..." -ForegroundColor White
+Write-Host "  [DEPLOY] Cloudflare Worker auto-syncs within 5 min (Actions verifying)..." -ForegroundColor White
 Write-Host "========================================" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "Track progress: gh run watch" -ForegroundColor Gray
