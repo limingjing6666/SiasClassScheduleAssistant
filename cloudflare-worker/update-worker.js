@@ -9,9 +9,10 @@
 
 const REPO_OWNER = 'limingjing6666';
 const REPO_NAME = 'SiasClassScheduleAssistant';
-const RELEASE_CACHE_KEY = 'https://limingjing.codes/__internal/latest-release-v1.json';
+const RELEASE_CACHE_KEY = 'https://limingjing.codes/__internal/latest-release-v2.json';
 const RELEASE_CACHE_TTL_SECONDS = 300;
-const USER_AGENT = 'SiasSchedule-Update-Worker/1.0';
+const FALLBACK_CACHE_TTL_SECONDS = 30;
+const USER_AGENT = 'SiasSchedule-Update-Worker/1.1';
 
 function parseVersionCode(versionName) {
   const m = String(versionName || '').match(/^(\d+)\.(\d+)\.(\d+)$/);
@@ -123,8 +124,104 @@ function renderMarkdown(md) {
   return blocks.join('\n');
 }
 
+function decodeXmlEntities(str) {
+  return String(str || '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&');
+}
+
+function sanitizeReleaseHtml(html) {
+  return String(html || '')
+    .replace(/<(script|style|iframe|object|embed)\b[\s\S]*?<\/\1>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/href\s*=\s*(["'])\s*javascript:[^"']*\1/gi, 'href="#"');
+}
+
+function htmlToPlainText(html) {
+  return decodeXmlEntities(
+    String(html || '')
+      .replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi, '\n【$1】\n')
+      .replace(/<li[^>]*>/gi, '• ')
+      .replace(/<\/li>/gi, '\n')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+  )
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 /**
- * 获取最新 GitHub Release 元数据（带 5 分钟边缘缓存 + 302 降级防限流）
+ * 降级数据源：解析 GitHub releases.atom 与 expanded_assets（不占用 api.github.com 匿名配额）
+ */
+async function fetchFromGithubAtom() {
+  const atomRes = await fetch(
+    `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases.atom`,
+    { headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/atom+xml, application/xml, text/xml' } }
+  );
+  if (!atomRes.ok) return null;
+
+  const xml = await atomRes.text();
+  const entryMatch = xml.match(/<entry>([\s\S]*?)<\/entry>/i);
+  if (!entryMatch) return null;
+  const entry = entryMatch[1];
+
+  const linkMatch = entry.match(/\/releases\/tag\/(v?\d+\.\d+\.\d+)/);
+  if (!linkMatch) return null;
+
+  const tagName = linkMatch[1];
+  const versionName = tagName.replace(/^v/i, '');
+  const updatedMatch = entry.match(/<updated>([^<]+)<\/updated>/i);
+  const contentMatch = entry.match(/<content[^>]*>([\s\S]*?)<\/content>/i);
+  const rawHtml = contentMatch ? decodeXmlEntities(contentMatch[1]).trim() : '';
+  const safeHtml = rawHtml ? sanitizeReleaseHtml(rawHtml) : '';
+  const plainLog = safeHtml ? htmlToPlainText(safeHtml) : `西亚斯课表 v${versionName} 更新发布`;
+
+  let apkName = `SiasSchedule_v${versionName}.apk`;
+  let apkSizeLabel = '';
+  try {
+    const assetsRes = await fetch(
+      `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/expanded_assets/${encodeURIComponent(tagName)}`,
+      { headers: { 'User-Agent': USER_AGENT } }
+    );
+    if (assetsRes.ok) {
+      const assetsHtml = await assetsRes.text();
+      const apkHrefMatch = assetsHtml.match(
+        new RegExp(`/${REPO_OWNER}/${REPO_NAME}/releases/download/[^"']+/([^/"']+\\.apk)`, 'i')
+      );
+      if (apkHrefMatch) {
+        apkName = decodeURIComponent(apkHrefMatch[1]);
+        const afterHref = assetsHtml.slice(apkHrefMatch.index);
+        const sizeMatch = afterHref.match(/>(\d+(?:\.\d+)?\s*(?:MB|KB|GB|Bytes))</i);
+        if (sizeMatch) apkSizeLabel = sizeMatch[1].trim();
+      }
+    }
+  } catch (err) {
+    console.error(JSON.stringify({ event: 'github_assets_html_error', error: String(err) }));
+  }
+
+  return {
+    tagName,
+    versionName,
+    versionCode: parseVersionCode(versionName),
+    updateLog: plainLog,
+    updateLogHtml: safeHtml,
+    apkName,
+    apkSize: 0,
+    apkSizeLabel,
+    apkDownloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${tagName}/${encodeURIComponent(apkName)}`,
+    publishedAt: updatedMatch ? updatedMatch[1].trim() : '',
+    source: 'atom'
+  };
+}
+
+/**
+ * 获取最新 GitHub Release 元数据（5 分钟边缘缓存；API → Atom Feed → 302 跳转三级容灾）
  */
 async function getLatestReleaseMeta(ctx) {
   const cache = caches.default;
@@ -161,10 +258,13 @@ async function getLatestReleaseMeta(ctx) {
           versionName,
           versionCode: parseVersionCode(versionName),
           updateLog: String(data.body || '修复已知问题，提升使用体验。').trim(),
+          updateLogHtml: '',
           apkName: apkAsset.name,
           apkSize: Number(apkAsset.size) || 0,
+          apkSizeLabel: '',
           apkDownloadUrl: apkAsset.browser_download_url,
-          publishedAt: data.published_at || ''
+          publishedAt: data.published_at || '',
+          source: 'api'
         };
       }
     }
@@ -172,7 +272,16 @@ async function getLatestReleaseMeta(ctx) {
     console.error(JSON.stringify({ event: 'github_api_error', error: String(err) }));
   }
 
-  // 2. 降级路径：若遇到 GitHub API 匿名限流，直接通过 /releases/latest 302 跳转获取最新版本号
+  // 2. 二级路径：GitHub releases.atom + expanded_assets（无 api.github.com 匿名限流，含完整更新日志）
+  if (!meta) {
+    try {
+      meta = await fetchFromGithubAtom();
+    } catch (err) {
+      console.error(JSON.stringify({ event: 'github_atom_error', error: String(err) }));
+    }
+  }
+
+  // 3. 兜底路径：直接通过 /releases/latest 302 跳转获取最新版本号（短 TTL）
   if (!meta) {
     const redirectRes = await fetch(
       `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest`,
@@ -193,19 +302,23 @@ async function getLatestReleaseMeta(ctx) {
         versionName,
         versionCode: parseVersionCode(versionName),
         updateLog: `西亚斯课表 v${versionName} 更新发布`,
+        updateLogHtml: '',
         apkName,
         apkSize: 0,
+        apkSizeLabel: '',
         apkDownloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${tagName}/${apkName}`,
-        publishedAt: ''
+        publishedAt: '',
+        source: 'redirect'
       };
     }
   }
 
   if (meta) {
+    const ttl = meta.source === 'redirect' ? FALLBACK_CACHE_TTL_SECONDS : RELEASE_CACHE_TTL_SECONDS;
     const cacheResp = new Response(JSON.stringify(meta), {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'Cache-Control': `public, max-age=${RELEASE_CACHE_TTL_SECONDS}`
+        'Cache-Control': `public, max-age=${ttl}`
       }
     });
     ctx.waitUntil(cache.put(cacheReq, cacheResp));
@@ -330,9 +443,13 @@ async function handleApkDownload(request, rawFilename, ctx) {
 async function handleLandingPage(request, ctx) {
   const meta = await getLatestReleaseMeta(ctx);
   const versionText = meta ? `v${meta.versionName}` : '最新版';
-  const sizeText = meta?.apkSize ? `${(meta.apkSize / 1024 / 1024).toFixed(1)} MB` : '';
+  const sizeText = meta?.apkSize
+    ? `${(meta.apkSize / 1024 / 1024).toFixed(1)} MB`
+    : (meta?.apkSizeLabel || '');
   const downloadHref = meta ? `/app/${encodeURIComponent(meta.apkName)}` : `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
-  const notesHtml = renderMarkdown(meta?.updateLog || '极简漫画风西亚斯教务课表助手，本地直连教务系统，保护账号隐私。');
+  const notesHtml = meta?.updateLogHtml
+    ? meta.updateLogHtml
+    : renderMarkdown(meta?.updateLog || '极简漫画风西亚斯教务课表助手，本地直连教务系统，保护账号隐私。');
 
   const html = `<!DOCTYPE html>
 <html lang="zh-CN">
