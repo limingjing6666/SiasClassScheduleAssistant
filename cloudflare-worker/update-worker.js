@@ -1,10 +1,12 @@
 /**
- * 西亚斯课表助手 — Cloudflare Worker 更新与下载分发服务
+ * 西亚斯课表助手 — Cloudflare Worker 更新、下载分发与轻量统计服务
  *
  * 路由：
  * - GET /app/update.json       → 动态拉取 GitHub Latest Release（5 分钟边缘缓存）生成更新元数据
  * - GET /app/<file>.apk        → 流式代理 GitHub Release APK 资产（支持 Range / HEAD，不缓存进 Worker 内存）
- * - GET / 或 /app/             → 漫画风最新版下载引导页
+ * - GET / 或 /app/             → 漫画风最新版下载引导页（含微信/QQ 内置浏览器引导条）
+ * - GET /app/stats(.json)?key= → 口令保护的下载与访问统计看板（基于 Cloudflare D1）
+ * - GET /favicon.ico           → 内联漫画风 SVG 图标
  */
 
 const REPO_OWNER = 'limingjing6666';
@@ -12,7 +14,15 @@ const REPO_NAME = 'SiasClassScheduleAssistant';
 const RELEASE_CACHE_KEY = 'https://limingjing.codes/__internal/latest-release-v2.json';
 const RELEASE_CACHE_TTL_SECONDS = 300;
 const FALLBACK_CACHE_TTL_SECONDS = 30;
-const USER_AGENT = 'SiasSchedule-Update-Worker/1.1';
+const USER_AGENT = 'SiasSchedule-Update-Worker/1.2';
+
+const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect x="6" y="6" width="52" height="52" rx="14" fill="#FFEAA7" stroke="#000" stroke-width="5"/>
+  <rect x="15" y="18" width="14" height="14" rx="4" fill="#74B9FF" stroke="#000" stroke-width="3.5"/>
+  <rect x="35" y="18" width="14" height="14" rx="4" fill="#55EFC4" stroke="#000" stroke-width="3.5"/>
+  <rect x="15" y="36" width="14" height="12" rx="4" fill="#FF7675" stroke="#000" stroke-width="3.5"/>
+  <rect x="35" y="36" width="14" height="12" rx="4" fill="#FFF" stroke="#000" stroke-width="3.5"/>
+</svg>`;
 
 function parseVersionCode(versionName) {
   const m = String(versionName || '').match(/^(\d+)\.(\d+)\.(\d+)$/);
@@ -262,6 +272,7 @@ async function getLatestReleaseMeta(ctx) {
           apkName: apkAsset.name,
           apkSize: Number(apkAsset.size) || 0,
           apkSizeLabel: '',
+          apkDownloadCount: Number(apkAsset.download_count) || 0,
           apkDownloadUrl: apkAsset.browser_download_url,
           publishedAt: data.published_at || '',
           source: 'api'
@@ -328,9 +339,125 @@ async function getLatestReleaseMeta(ctx) {
 }
 
 /**
+ * 北京时间日期 YYYY-MM-DD 与格式化时间
+ */
+function getBeijingDay(date = new Date()) {
+  const bj = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  return bj.toISOString().slice(0, 10);
+}
+
+function formatBeijingTime(isoStr) {
+  const d = new Date(isoStr);
+  if (Number.isNaN(d.getTime())) return String(isoStr || '');
+  const bj = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+  return bj.toISOString().slice(5, 19).replace('T', ' ');
+}
+
+function timingSafeEqualStr(a, b) {
+  const enc = new TextEncoder();
+  const ba = enc.encode(String(a || ''));
+  const bb = enc.encode(String(b || ''));
+  if (ba.length === 0 || ba.length !== bb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < ba.length; i++) diff |= ba[i] ^ bb[i];
+  return diff === 0;
+}
+
+function detectClientInfo(request) {
+  const ua = request.headers.get('user-agent') || '';
+  const isWechat = /MicroMessenger|\bQQ\/\d/i.test(ua);
+  const isBot = !ua || /\b(curl|wget|python-requests|go-http-client|bot|spider|crawler|headless|lighthouse|monitor|uptime|scanner|check)\b/i.test(ua);
+
+  let device = 'other';
+  if (/Android/i.test(ua)) device = 'android';
+  else if (/iPhone|iPad|iPod/i.test(ua)) device = 'ios';
+  else if (/Windows NT|Macintosh|X11;\s*Linux/i.test(ua)) device = 'desktop';
+
+  const cf = request.cf || {};
+  return {
+    device,
+    isWechat,
+    isBot,
+    country: String(cf.country || ''),
+    city: String(cf.city || '')
+  };
+}
+
+function recordLandingStat(request, env, ctx) {
+  if (!env?.STATS_DB || request.method !== 'GET') return;
+  const info = detectClientInfo(request);
+  if (info.isBot) return;
+
+  const day = getBeijingDay();
+  const metrics = ['landing_views', `landing_${info.device}`];
+  if (info.isWechat) metrics.push('landing_wechat');
+
+  const stmt = env.STATS_DB.prepare(
+    'INSERT INTO daily_stats(day, metric, count) VALUES (?, ?, 1) ON CONFLICT(day, metric) DO UPDATE SET count = count + 1'
+  );
+  ctx.waitUntil(
+    env.STATS_DB.batch(metrics.map(m => stmt.bind(day, m))).catch(err => {
+      console.error(JSON.stringify({ event: 'stats_landing_error', error: String(err) }));
+    })
+  );
+}
+
+function recordUpdateCheckStat(request, env, ctx) {
+  if (!env?.STATS_DB || request.method !== 'GET') return;
+  const day = getBeijingDay();
+  const stmt = env.STATS_DB.prepare(
+    'INSERT INTO daily_stats(day, metric, count) VALUES (?, ?, 1) ON CONFLICT(day, metric) DO UPDATE SET count = count + 1'
+  );
+  ctx.waitUntil(
+    stmt.bind(day, 'update_checks').run().catch(err => {
+      console.error(JSON.stringify({ event: 'stats_update_error', error: String(err) }));
+    })
+  );
+}
+
+function recordApkDownloadStat(request, env, ctx, filename, status) {
+  if (!env?.STATS_DB || request.method !== 'GET') return;
+
+  // 仅统计完整下载或从 0 字节开始的整包/大段拉取（排除断点续传中间分片与小范围探测）
+  const rangeHeader = request.headers.get('range') || '';
+  const isFullOrInitialDownload =
+    status === 200 ||
+    (status === 206 && /^bytes=0-(?:$|\d{6,})/i.test(rangeHeader.trim()));
+  if (!isFullOrInitialDownload) return;
+
+  const info = detectClientInfo(request);
+  if (info.isBot) return;
+
+  const now = new Date();
+  const day = getBeijingDay(now);
+  const ts = now.toISOString();
+  const incStmt = env.STATS_DB.prepare(
+    'INSERT INTO daily_stats(day, metric, count) VALUES (?, ?, 1) ON CONFLICT(day, metric) DO UPDATE SET count = count + 1'
+  );
+  const logStmt = env.STATS_DB.prepare(
+    'INSERT INTO download_events(ts, day, filename, device, is_wechat, country, city, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  );
+
+  const ops = [
+    incStmt.bind(day, 'apk_downloads'),
+    incStmt.bind(day, `apk_${info.device}`),
+    logStmt.bind(ts, day, filename, info.device, info.isWechat ? 1 : 0, info.country, info.city, status)
+  ];
+  if (info.isWechat) {
+    ops.push(incStmt.bind(day, 'apk_wechat'));
+  }
+
+  ctx.waitUntil(
+    env.STATS_DB.batch(ops).catch(err => {
+      console.error(JSON.stringify({ event: 'stats_apk_error', error: String(err) }));
+    })
+  );
+}
+
+/**
  * 响应 /app/update.json
  */
-async function handleUpdateJson(request, ctx) {
+async function handleUpdateJson(request, env, ctx) {
   const meta = await getLatestReleaseMeta(ctx);
   if (!meta) {
     return new Response(
@@ -344,6 +471,8 @@ async function handleUpdateJson(request, ctx) {
       }
     );
   }
+
+  recordUpdateCheckStat(request, env, ctx);
 
   const origin = new URL(request.url).origin;
   const payload = {
@@ -366,7 +495,7 @@ async function handleUpdateJson(request, ctx) {
 /**
  * 流式代理 /app/<filename>.apk（支持 Range 与 HEAD）
  */
-async function handleApkDownload(request, rawFilename, ctx) {
+async function handleApkDownload(request, rawFilename, env, ctx) {
   let filename;
   try {
     filename = decodeURIComponent(rawFilename);
@@ -417,6 +546,8 @@ async function handleApkDownload(request, rawFilename, ctx) {
     return new Response('Upstream APK unavailable', { status: upstreamRes.status });
   }
 
+  recordApkDownloadStat(request, env, ctx, filename, upstreamRes.status);
+
   const respHeaders = new Headers();
   respHeaders.set('Content-Type', 'application/vnd.android.package-archive');
   respHeaders.set('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"`);
@@ -438,9 +569,11 @@ async function handleApkDownload(request, rawFilename, ctx) {
 }
 
 /**
- * 简洁漫画风下载引导页（访问 / 或 /app/ 时展示）
+ * 简洁漫画风下载引导页（访问 / 或 /app/ 时展示，含微信/QQ 内置浏览器引导条）
  */
-async function handleLandingPage(request, ctx) {
+async function handleLandingPage(request, env, ctx) {
+  recordLandingStat(request, env, ctx);
+
   const meta = await getLatestReleaseMeta(ctx);
   const versionText = meta ? `v${meta.versionName}` : '最新版';
   const sizeText = meta?.apkSize
@@ -457,19 +590,55 @@ async function handleLandingPage(request, ctx) {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>西亚斯课表助手 ${escapeHtml(versionText)}</title>
+  <link rel="icon" href="/favicon.ico" type="image/svg+xml" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       min-height: 100vh;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       padding: 24px;
+      gap: 16px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background-color: #F4F4F5;
       background-image: radial-gradient(#D4D4D8 1.5px, transparent 1.5px);
       background-size: 20px 20px;
       color: #000;
+    }
+    .inapp-tip {
+      display: none;
+      width: 100%;
+      max-width: 480px;
+      background: #FFEAA7;
+      border: 3px solid #000;
+      border-radius: 18px;
+      box-shadow: 5px 5px 0 #000;
+      padding: 14px 16px;
+      font-size: 13.5px;
+      line-height: 1.55;
+      color: #18181B;
+    }
+    .inapp-tip.show { display: block; }
+    .inapp-tip.pulse {
+      animation: tipPulse 0.35s ease 2;
+    }
+    @keyframes tipPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+    .inapp-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 900;
+      font-size: 14.5px;
+      margin-bottom: 4px;
+    }
+    .inapp-arrow {
+      font-size: 18px;
+      font-weight: 900;
     }
     .card {
       position: relative;
@@ -581,6 +750,13 @@ async function handleLandingPage(request, ctx) {
   </style>
 </head>
 <body>
+  <aside id="inapp-tip" class="inapp-tip" role="alert">
+    <div class="inapp-title">
+      <span>微信 / QQ 内无法直接下载安装包</span>
+      <span class="inapp-arrow">↗</span>
+    </div>
+    <div>请点击右上角 <strong>···</strong> 菜单，选择 <strong>在默认浏览器中打开</strong> 即可直接下载安装。</div>
+  </aside>
   <main class="card">
     <div class="tag">SIAS SCHEDULE</div>
     <h1>西亚斯课表助手</h1>
@@ -589,12 +765,30 @@ async function handleLandingPage(request, ctx) {
       ${sizeText ? `<span class="size">${escapeHtml(sizeText)} · Android APK</span>` : '<span class="size">Android APK</span>'}
     </div>
     <div class="notes">${notesHtml}</div>
-    <a class="btn" href="${downloadHref}">立即下载 Android 安装包</a>
+    <a id="download-btn" class="btn" href="${downloadHref}">立即下载 Android 安装包</a>
     <div class="footer">
       <a href="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases" target="_blank" rel="noopener">GitHub Releases</a>
       · <a href="/app/update.json">update.json</a>
     </div>
   </main>
+  <script>
+    (function () {
+      var isInApp = /MicroMessenger|\\bQQ\\/\\d/i.test(navigator.userAgent || '');
+      if (!isInApp) return;
+      var tip = document.getElementById('inapp-tip');
+      var btn = document.getElementById('download-btn');
+      if (tip) tip.classList.add('show');
+      if (btn && tip) {
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          tip.classList.remove('pulse');
+          void tip.offsetWidth;
+          tip.classList.add('pulse');
+          tip.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+      }
+    })();
+  </script>
 </body>
 </html>`;
 
@@ -603,6 +797,279 @@ async function handleLandingPage(request, ctx) {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'public, max-age=120'
+    }
+  });
+}
+
+/**
+ * 口令保护的下载与访问统计看板（/app/stats 与 /app/stats.json）
+ */
+async function handleStats(request, env, ctx, asJson) {
+  const url = new URL(request.url);
+  const key = url.searchParams.get('key') || '';
+  if (!env?.STATS_KEY || !timingSafeEqualStr(key, env.STATS_KEY)) {
+    return new Response('Not Found', { status: 404 });
+  }
+  if (!env?.STATS_DB) {
+    return new Response('Stats database not configured', { status: 503 });
+  }
+
+  const today = getBeijingDay();
+  const [totalsRes, recentDaysRes, eventsRes, meta] = await Promise.all([
+    env.STATS_DB.prepare('SELECT metric, SUM(count) AS total FROM daily_stats GROUP BY metric').all(),
+    env.STATS_DB.prepare(
+      'SELECT day, metric, count FROM daily_stats WHERE day >= ? ORDER BY day DESC'
+    ).bind(getBeijingDay(new Date(Date.now() - 13 * 24 * 60 * 60 * 1000))).all(),
+    env.STATS_DB.prepare(
+      'SELECT ts, filename, device, is_wechat, country, city, status FROM download_events ORDER BY id DESC LIMIT 30'
+    ).all(),
+    getLatestReleaseMeta(ctx)
+  ]);
+
+  const totals = {};
+  for (const row of (totalsRes.results || [])) {
+    totals[row.metric] = Number(row.total) || 0;
+  }
+
+  const dailyMap = new Map();
+  for (const row of (recentDaysRes.results || [])) {
+    if (!dailyMap.has(row.day)) {
+      dailyMap.set(row.day, {
+        day: row.day,
+        landing_views: 0,
+        landing_wechat: 0,
+        apk_downloads: 0,
+        apk_android: 0,
+        update_checks: 0
+      });
+    }
+    const item = dailyMap.get(row.day);
+    item[row.metric] = Number(row.count) || 0;
+  }
+  const daily = Array.from(dailyMap.values()).sort((a, b) => (a.day < b.day ? 1 : -1));
+  const todayStats = dailyMap.get(today) || {
+    day: today,
+    landing_views: 0,
+    landing_wechat: 0,
+    apk_downloads: 0,
+    apk_android: 0,
+    update_checks: 0
+  };
+  const recentDownloads = (eventsRes.results || []).map(r => ({
+    time: formatBeijingTime(r.ts),
+    filename: r.filename,
+    device: r.device,
+    isWechat: Boolean(r.is_wechat),
+    location: [r.country, r.city].filter(Boolean).join(' / ') || '-',
+    status: r.status
+  }));
+
+  const statsPayload = {
+    today,
+    latestVersion: meta?.versionName || '',
+    githubLatestDownloads: meta?.apkDownloadCount ?? null,
+    todayStats,
+    totals: {
+      apk_downloads: totals.apk_downloads || 0,
+      landing_views: totals.landing_views || 0,
+      landing_wechat: totals.landing_wechat || 0,
+      update_checks: totals.update_checks || 0,
+      apk_devices: {
+        android: totals.apk_android || 0,
+        ios: totals.apk_ios || 0,
+        desktop: totals.apk_desktop || 0,
+        other: totals.apk_other || 0
+      },
+      landing_devices: {
+        android: totals.landing_android || 0,
+        ios: totals.landing_ios || 0,
+        desktop: totals.landing_desktop || 0,
+        other: totals.landing_other || 0
+      }
+    },
+    daily,
+    recentDownloads
+  };
+
+  if (asJson) {
+    return new Response(JSON.stringify(statsPayload, null, 2), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Robots-Tag': 'noindex, nofollow'
+      }
+    });
+  }
+
+  const deviceLabels = { android: 'Android', ios: 'iOS', desktop: '桌面', other: '其他' };
+  const dailyRowsHtml = daily.length > 0
+    ? daily.map(d => `<tr>
+        <td>${escapeHtml(d.day)}</td>
+        <td><strong>${d.apk_downloads || 0}</strong></td>
+        <td>${d.landing_views || 0}</td>
+        <td>${d.landing_wechat || 0}</td>
+        <td>${d.update_checks || 0}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="5" class="empty">暂无记录（新访问和下载会实时写入）</td></tr>';
+
+  const eventRowsHtml = recentDownloads.length > 0
+    ? recentDownloads.map(ev => `<tr>
+        <td>${escapeHtml(ev.time)}</td>
+        <td><code>${escapeHtml(ev.filename)}</code></td>
+        <td><span class="badge">${escapeHtml(deviceLabels[ev.device] || ev.device)}</span>${ev.isWechat ? ' <span class="badge wx">微信</span>' : ''}</td>
+        <td>${escapeHtml(ev.location)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="4" class="empty">暂无真实 APK 下载记录</td></tr>';
+
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>西亚斯课表助手 · 下载统计</title>
+  <link rel="icon" href="/favicon.ico" type="image/svg+xml" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      padding: 24px 16px 40px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #F4F4F5;
+      background-image: radial-gradient(#D4D4D8 1.5px, transparent 1.5px);
+      background-size: 20px 20px;
+      color: #18181B;
+    }
+    .wrap { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 8px; }
+    h1 { font-size: 24px; font-weight: 900; }
+    .sub { font-size: 13px; color: #71717A; font-weight: 600; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+    .kpi {
+      background: #FFF;
+      border: 3px solid #000;
+      border-radius: 18px;
+      box-shadow: 5px 5px 0 #000;
+      padding: 16px;
+    }
+    .kpi.c1 { background: #E3F2FD; }
+    .kpi.c2 { background: #E6FFFA; }
+    .kpi.c3 { background: #FFF9DB; }
+    .kpi.c4 { background: #F3E8FF; }
+    .kpi-label { font-size: 12px; font-weight: 800; color: #52525B; margin-bottom: 6px; }
+    .kpi-val { font-size: 30px; font-weight: 900; line-height: 1.1; }
+    .kpi-sub { font-size: 12px; color: #52525B; margin-top: 6px; font-weight: 600; }
+    .panel {
+      background: #FFF;
+      border: 3px solid #000;
+      border-radius: 20px;
+      box-shadow: 6px 6px 0 #000;
+      padding: 18px 20px;
+      overflow-x: auto;
+    }
+    .panel h2 { font-size: 16px; font-weight: 900; margin-bottom: 12px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      background: #FAFAFA;
+      border: 2px solid #000;
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 9px 8px; border-bottom: 1.5px solid #E4E4E7; white-space: nowrap; }
+    th { font-weight: 800; color: #52525B; border-bottom: 2px solid #000; }
+    tr:last-child td { border-bottom: none; }
+    code { background: #F4F4F5; padding: 2px 6px; border-radius: 5px; font-size: 12px; }
+    .badge {
+      display: inline-block;
+      background: #E4E4E7;
+      border: 1.5px solid #000;
+      border-radius: 999px;
+      padding: 1px 8px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .badge.wx { background: #55EFC4; }
+    .empty { text-align: center; color: #A1A1AA; padding: 20px 0; }
+    .foot { text-align: center; font-size: 12px; color: #71717A; }
+    .foot a { color: #2563EB; text-decoration: none; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <h1>西亚斯课表助手 · 下载看板</h1>
+      <div class="sub">北京时间 ${escapeHtml(today)} · 最新版 v${escapeHtml(meta?.versionName || '-')}</div>
+    </div>
+
+    <div class="grid">
+      <div class="kpi c1">
+        <div class="kpi-label">APK 下载（今日 / 累计）</div>
+        <div class="kpi-val">${todayStats.apk_downloads || 0} <span style="font-size:16px;font-weight:700;color:#52525B">/ ${statsPayload.totals.apk_downloads}</span></div>
+        <div class="kpi-sub">仅计真实浏览器/App 整包下载</div>
+      </div>
+      <div class="kpi c2">
+        <div class="kpi-label">引导页访问（今日 / 累计）</div>
+        <div class="kpi-val">${todayStats.landing_views || 0} <span style="font-size:16px;font-weight:700;color:#52525B">/ ${statsPayload.totals.landing_views}</span></div>
+        <div class="kpi-sub">微信/QQ 内打开：${statsPayload.totals.landing_wechat} 次</div>
+      </div>
+      <div class="kpi c3">
+        <div class="kpi-label">更新检测（今日 / 累计）</div>
+        <div class="kpi-val">${todayStats.update_checks || 0} <span style="font-size:16px;font-weight:700;color:#52525B">/ ${statsPayload.totals.update_checks}</span></div>
+        <div class="kpi-sub">/app/update.json 请求量</div>
+      </div>
+      <div class="kpi c4">
+        <div class="kpi-label">GitHub 当前版累计</div>
+        <div class="kpi-val">${meta?.apkDownloadCount != null ? meta.apkDownloadCount : '-'}</div>
+        <div class="kpi-sub">含 GitHub 直下与 Worker 回源</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>设备分布（引导页访问 / APK 下载）</h2>
+      <div class="chips">
+        <span class="chip">Android：${statsPayload.totals.landing_devices.android} 访 / ${statsPayload.totals.apk_devices.android} 下</span>
+        <span class="chip">iOS：${statsPayload.totals.landing_devices.ios} 访 / ${statsPayload.totals.apk_devices.ios} 下</span>
+        <span class="chip">桌面：${statsPayload.totals.landing_devices.desktop} 访 / ${statsPayload.totals.apk_devices.desktop} 下</span>
+        <span class="chip">其他：${statsPayload.totals.landing_devices.other} 访 / ${statsPayload.totals.apk_devices.other} 下</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>近 14 天趋势</h2>
+      <table>
+        <thead>
+          <tr><th>日期</th><th>APK 下载</th><th>引导页访问</th><th>微信内打开</th><th>更新检测</th></tr>
+        </thead>
+        <tbody>${dailyRowsHtml}</tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>最近 30 次 APK 下载明细（不记录 IP）</h2>
+      <table>
+        <thead>
+          <tr><th>北京时间</th><th>安装包</th><th>设备</th><th>地区</th></tr>
+        </thead>
+        <tbody>${eventRowsHtml}</tbody>
+      </table>
+    </div>
+
+    <div class="foot">
+      <a href="/app/stats.json?key=${encodeURIComponent(key)}">JSON 原始数据</a> · <a href="/">返回下载页</a>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  return new Response(html, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Robots-Tag': 'noindex, nofollow'
     }
   });
 }
@@ -627,17 +1094,35 @@ export default {
     const url = new URL(request.url);
     const pathname = url.pathname;
 
+    if (pathname === '/favicon.ico') {
+      return new Response(FAVICON_SVG, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/svg+xml; charset=utf-8',
+          'Cache-Control': 'public, max-age=604800'
+        }
+      });
+    }
+
+    if (pathname === '/app/stats' || pathname === '/app/stats/') {
+      return handleStats(request, env, ctx, false);
+    }
+
+    if (pathname === '/app/stats.json') {
+      return handleStats(request, env, ctx, true);
+    }
+
     if (pathname === '/app/update.json') {
-      return handleUpdateJson(request, ctx);
+      return handleUpdateJson(request, env, ctx);
     }
 
     if (pathname.startsWith('/app/') && pathname.length > 5) {
       const filename = pathname.slice('/app/'.length);
-      return handleApkDownload(request, filename, ctx);
+      return handleApkDownload(request, filename, env, ctx);
     }
 
     if (pathname === '/' || pathname === '/app' || pathname === '/app/') {
-      return handleLandingPage(request, ctx);
+      return handleLandingPage(request, env, ctx);
     }
 
     return new Response('Not Found', { status: 404 });
