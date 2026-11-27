@@ -12,12 +12,10 @@
     <view class="filter-bar">
       <view class="filter-item">
         <text class="filter-label">学期</text>
-        <picker @change="onSemesterChange" :value="semesterIndex" :range="semesterList" range-key="label">
-          <view class="filter-picker">
-            <text class="filter-value">{{ currentSemesterLabel || '选择学期' }}</text>
-            <text class="filter-arrow">&#9660;</text>
-          </view>
-        </picker>
+        <view class="filter-picker" @click="showSemesterPicker = true">
+          <text class="filter-value">{{ currentSemesterLabel || '选择学期' }}</text>
+          <text class="filter-arrow">&#9660;</text>
+        </view>
       </view>
     </view>
 
@@ -117,6 +115,14 @@
         <text class="retry-text">重试</text>
       </view>
     </view>
+    <MangaPicker
+      :visible="showSemesterPicker"
+      title="选择校历学期"
+      :options="semesterList"
+      :selected-index="semesterIndex"
+      @select="onSemesterSelect"
+      @close="showSemesterPicker = false"
+    />
   </view>
 </template>
 
@@ -124,28 +130,20 @@
 import { ref, computed, onMounted } from 'vue';
 import type { SchoolCalendarData } from '@/types/calendar';
 import { fetchSchoolCalendar, getCachedCalendar, cacheCalendar } from '@/utils/calendar';
-import { getCrawler } from '@/utils/session';
 import { readPassword } from '@/utils/crypto';
+import { useScheduleStore } from '@/stores/schedule';
+import { loadSemesterOptions, type SemesterOption } from '@/utils/semester';
+import MangaPicker from '@/components/MangaPicker.vue';
 
-interface Semester {
-  id: number;
-  schoolYear: string;
-  name: string;
-}
-
+const scheduleStore = useScheduleStore();
 const loading = ref(false);
 const calendarData = ref<SchoolCalendarData | null>(null);
 const errorMsg = ref('');
-const semesters = ref<Semester[]>([]);
+const semesterList = ref<SemesterOption[]>([]);
 const semesterIndex = ref(0);
-
-const semesterList = computed(() => semesters.value.map(s => ({
-  id: s.id,
-  label: `${s.schoolYear} 学期${s.name}`
-})));
+const showSemesterPicker = ref(false);
 
 const currentSemesterLabel = computed(() => {
-  if (semesterList.value.length === 0) return '';
   return semesterList.value[semesterIndex.value]?.label || '';
 });
 
@@ -175,32 +173,22 @@ onMounted(async () => {
 
 async function loadSemesters() {
   try {
-    const cachedSemesters = uni.getStorageSync('history_semesters');
-    if (cachedSemesters && cachedSemesters.semesters) {
-      semesters.value = cachedSemesters.semesters.map((s: { id: number; schoolYear: string; name: string }) => ({
-        id: s.id, schoolYear: s.schoolYear, name: s.name
-      })).reverse();
-    } else {
-      const user = getUserInfo();
-      if (!user) return;
-      const crawler = await getCrawler(user.username, user.password);
-      await crawler.fetchSemesters();
-      const rawSemesters = crawler.getSemesters();
-      semesters.value = rawSemesters.map(s => ({ id: s.id, schoolYear: s.schoolYear, name: s.name })).reverse();
-      uni.setStorageSync('history_semesters', { semesters: rawSemesters, lastFetchTime: Date.now() });
-    }
-    if (semesters.value.length > 0) {
-      semesterIndex.value = 0;
-      await loadCalendar(semesters.value[0].id);
+    const { options, defaultIndex } = await loadSemesterOptions('all');
+    semesterList.value = options;
+    semesterIndex.value = defaultIndex;
+
+    const target = options[defaultIndex];
+    if (target) {
+      await loadCalendar(target.id);
     }
   } catch (e: unknown) {
     console.error('[Calendar] Load semesters failed:', e);
-    errorMsg.value = '加载学期列表失败';
+    errorMsg.value = e instanceof Error && e.message === 'NOT_LOGGED_IN' ? '请先登录' : '加载学期列表失败';
   }
 }
 
-async function onSemesterChange(e: { detail: { value: number } }) {
-  const index = e.detail.value;
+async function onSemesterSelect(index: number) {
+  if (index === semesterIndex.value) return;
   semesterIndex.value = index;
   const semester = semesterList.value[index];
   if (semester) {
@@ -213,8 +201,8 @@ async function loadCalendar(semesterId: number) {
   errorMsg.value = '';
   calendarData.value = null;
 
-  // 优先展示缓存（离线或网络慢时用户不必等待）
-  const cached = getCachedCalendar();
+  // 优先展示对应学期的本地缓存（按 semesterId 隔离，避免跨学期串数据）
+  const cached = getCachedCalendar(semesterId);
   if (cached && cached.startDate) {
     calendarData.value = cached;
     loading.value = false;
@@ -232,12 +220,28 @@ async function loadCalendar(semesterId: number) {
     calendarData.value = data;
 
     if (data.startDate) {
-      cacheCalendar(data);
+      cacheCalendar(data, semesterId);
+      // 若查看的是当前学期，顺便同步开学日期与总周数到全局 Store
+      if (scheduleStore.currentSemesterId && String(semesterId) === scheduleStore.currentSemesterId) {
+        scheduleStore.applySemesterCalendar({
+          semesterId: String(semesterId),
+          semester: data.semester,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          totalWeeks: data.totalWeeks
+        });
+      }
     }
   } catch (e: unknown) {
     console.error('[Calendar] Load failed:', e);
+    // 离线/非校园网降级：允许回退展示过期缓存，避免白屏
     if (!calendarData.value) {
-      errorMsg.value = e instanceof Error ? e.message : '获取校历失败';
+      const stale = getCachedCalendar(semesterId, true);
+      if (stale && stale.startDate) {
+        calendarData.value = stale;
+      } else {
+        errorMsg.value = e instanceof Error ? e.message : '获取校历失败';
+      }
     }
   } finally {
     loading.value = false;

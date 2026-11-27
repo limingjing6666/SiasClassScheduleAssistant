@@ -26,6 +26,7 @@
         "enablePullDownRefresh": true,
         "onReachBottomDistance": 50,
         "app-plus": {
+          "animationType": "none",
           "statusBar": {
             "style": "dark"
           }
@@ -39,6 +40,7 @@
         "navigationStyle": "custom",
         "navigationBarBackgroundColor": "#FFFFFF",
         "app-plus": {
+          "animationType": "none",
           "statusBar": {
             "style": "dark"
           }
@@ -48,10 +50,11 @@
     {
       "path": "pages/more/more",
       "style": {
-        "navigationBarTitleText": "更多",
+        "navigationBarTitleText": "我的",
         "navigationStyle": "custom",
         "navigationBarBackgroundColor": "#FFFFFF",
         "app-plus": {
+          "animationType": "none",
           "statusBar": {
             "style": "dark"
           }

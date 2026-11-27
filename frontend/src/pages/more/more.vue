@@ -264,7 +264,9 @@ async function doLogout() {
 }
 
 .page-header {
-  padding: 0 40rpx 8rpx;
+  background: #FFFFFF;
+  padding: 0 40rpx 16rpx;
+  border-bottom: 3rpx solid #000000;
 }
 
 .status-bar {
@@ -272,11 +274,12 @@ async function doLogout() {
 }
 
 .page-title {
+  display: block;
   font-size: 52rpx;
   font-weight: 900;
   color: #000000;
   letter-spacing: -2rpx;
-  padding: 16rpx 0 8rpx;
+  padding: 12rpx 0 4rpx;
 }
 
 .page-body {
@@ -554,7 +557,7 @@ async function doLogout() {
 
 .logout-btn:active {
   transform: translate(4rpx, 4rpx);
-  box-shadow: 4rpx 4rpx 0 #000000;
+  box-shadow: 0 0 0 #000000;
 }
 
 .logout-icon {
@@ -572,7 +575,7 @@ async function doLogout() {
 /* ===== 版本 ===== */
 .version-info {
   text-align: center;
-  padding: 40rpx 0 24rpx;
+  padding: 40rpx 0 180rpx;
 }
 
 .version-text {

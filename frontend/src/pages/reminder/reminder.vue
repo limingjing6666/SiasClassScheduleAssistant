@@ -46,7 +46,7 @@
     </view>
 
     <view class="tip-section" v-if="settings.enabled">
-      <text class="tip-text">提示：请确保已开启通知权限和自启动权限，否则提醒可能无法正常触发。</text>
+      <text class="tip-text">提示：请确保已开启通知与自启动权限，以免提醒无法正常触发。</text>
     </view>
   </view>
 </template>

@@ -368,13 +368,13 @@ export class SiasCrawler {
   }
 
   /**
-   * 通过学期列表 + 当前日期 校正 currentSemesterId
+   * 通过教务首页 + 学期列表校正 currentSemesterId
    *
-   * 规则：
-   *   9月 ~ 次年1月  → 第1学期（学年起始年 = 当年/去年）
-   *   2月 ~ 8月      → 第2学期（学年起始年 = 去年）
-   *
-   * 例：2026-03-25 → 2025-2026 学期2
+   * 优先策略：
+   *   1. 读取 homeExt!main.action 中教务系统官方显示的当前学年学期（如 "2026-2027 第 1 学期"）
+   *      精确匹配 allSemesters，彻底避免 8 月底提前开学或 2 月初开学时的月份误判。
+   *   2. 首页解析失败时降级到日期推算：
+   *      8月20日 ~ 次年1月 → 第1学期；2月 ~ 8月19日 → 第2学期。
    */
   private async correctCurrentSemester(): Promise<void> {
     try {
@@ -382,32 +382,67 @@ export class SiasCrawler {
       const ok = await this.fetchSemesters();
       if (!ok || this.allSemesters.length === 0) return;
 
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth() + 1; // 1-12
+      let match: { id: number; schoolYear: string; name: string } | undefined;
 
-      let startYear: number;
-      let termName: string;
-
-      if (month >= 9) {
-        // 9-12月：本学年第1学期
-        startYear = year;
-        termName = '1';
-      } else if (month >= 2) {
-        // 2-8月：上学年第2学期
-        startYear = year - 1;
-        termName = '2';
-      } else {
-        // 1月：上学年第1学期（考试/寒假尾声）
-        startYear = year - 1;
-        termName = '1';
+      // 1. 优先从教务首页读取官方当前学年与学期（不受历史课表查询残留影响）
+      try {
+        const homeHtml = await this.fetchProfileHtml();
+        const plain = homeHtml
+          .replace(/<[^>]*>/g, ' ')
+          .replace(/&nbsp;?/gi, ' ')
+          .replace(/\s+/g, ' ');
+        const homeMatch = plain.match(/(\d{4})\s*-\s*(\d{4})\s*(?:学年(?:度)?)?\s*第\s*(\d+)\s*学期/);
+        if (homeMatch) {
+          const officialStartYear = parseInt(homeMatch[1], 10);
+          const officialTerm = homeMatch[3];
+          match = this.allSemesters.find(s => {
+            const syYear = parseInt(s.schoolYear, 10);
+            return syYear === officialStartYear && String(s.name) === officialTerm;
+          });
+          if (match) {
+            console.log('[autoDetect] Matched official current semester from homeExt:',
+              `${match.schoolYear} 学期${match.name} (id=${match.id})`);
+          }
+        }
+      } catch (e: unknown) {
+        if (e instanceof Error && e.message === 'NETWORK_ERROR') throw e;
+        console.warn('[autoDetect] Read homeExt semester failed, falling back to date heuristic');
       }
 
-      // schoolYear 格式如 "2025-2026"，parseInt 取首段年份
-      const match = this.allSemesters.find(s => {
-        const syYear = parseInt(s.schoolYear, 10);
-        return syYear === startYear && String(s.name) === termName;
-      });
+      // 2. 降级：按当前日期推算（兼容 8 月下旬秋季开学）
+      if (!match) {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1; // 1-12
+        const day = now.getDate();
+
+        let startYear: number;
+        let termName: string;
+
+        if (month >= 9 || (month === 8 && day >= 20)) {
+          // 8月下旬 ~ 12月：本学年第1学期
+          startYear = year;
+          termName = '1';
+        } else if (month >= 2) {
+          // 2月 ~ 8月中旬：上学年第2学期
+          startYear = year - 1;
+          termName = '2';
+        } else {
+          // 1月：上学年第1学期（考试/寒假尾声）
+          startYear = year - 1;
+          termName = '1';
+        }
+
+        // schoolYear 格式如 "2025-2026"，parseInt 取首段年份
+        match = this.allSemesters.find(s => {
+          const syYear = parseInt(s.schoolYear, 10);
+          return syYear === startYear && String(s.name) === termName;
+        });
+
+        if (!match) {
+          console.warn('[autoDetect] No semester match for', startYear, 'term', termName);
+        }
+      }
 
       if (match) {
         if (String(match.id) !== this.currentSemesterId) {
@@ -415,10 +450,9 @@ export class SiasCrawler {
             `(${match.schoolYear} 学期${match.name})`);
           this.currentSemesterId = String(match.id);
         }
-      } else {
-        console.warn('[autoDetect] No semester match for', startYear, 'term', termName);
       }
-    } catch {
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message === 'NETWORK_ERROR') throw e;
       console.warn('[autoDetect] Could not correct semester, using detected value');
     }
   }

@@ -4,38 +4,119 @@
  */
 
 import type { CalendarDay, CalendarWeek, SchoolCalendarData, CalendarCache } from '@/types/calendar';
+import { parseLocalDate } from './schedule';
 import { getCrawler } from './session';
 
 const CACHE_KEY = 'school_calendar';
+const CACHE_TTL = 24 * 60 * 60 * 1000;
+
+export interface SemesterCalendarMeta {
+  semesterId: string | null;
+  semester: string;
+  startDate: string;
+  endDate: string;
+  totalWeeks: number;
+}
 
 /**
- * 英文月份名 → 数字
+ * 英文月份名（缩写/全称）→ 数字
  */
 const MONTH_MAP: Record<string, string> = {
-  Jan: '01', Feb: '02', Mar: '03', Apr: '04',
-  May: '05', Jun: '06', Jul: '07', Aug: '08',
-  Sep: '09', Oct: '10', Nov: '11', Dec: '12'
+  jan: '01', january: '01',
+  feb: '02', february: '02',
+  mar: '03', march: '03',
+  apr: '04', april: '04',
+  may: '05',
+  jun: '06', june: '06',
+  jul: '07', july: '07',
+  aug: '08', august: '08',
+  sep: '09', sept: '09', september: '09',
+  oct: '10', october: '10',
+  nov: '11', november: '11',
+  dec: '12', december: '12'
 };
 
 /**
- * 解析日期字符串 "Mar 2, 2026" → "2026-03-02"
+ * 统一解析校历日期字符串 → "YYYY-MM-DD"
+ * 支持格式：
+ * - 英文："Mar 2, 2026" / "August 31, 2026" / "Sept 1, 2026"
+ * - 数字："2026-08-31" / "2026-8-31" / "2026/08/31" / "2026.08.31"
+ * - 中文："2026年8月31日"
  */
-function parseEnglishDate(dateStr: string): string {
-  const m = dateStr.trim().match(/(\w{3})\s+(\d{1,2}),\s*(\d{4})/);
-  if (!m) return '';
-  const month = MONTH_MAP[m[1]] || '01';
-  const day = m[2].padStart(2, '0');
-  return `${m[3]}-${month}-${day}`;
+export function parseCalendarDate(dateStr: string): string {
+  const cleaned = dateStr.trim();
+
+  // 1. ISO / 斜杠 / 点号格式: 2026-08-31, 2026/8/31, 2026.08.31
+  const numericMatch = cleaned.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (numericMatch) {
+    const year = numericMatch[1];
+    const month = numericMatch[2].padStart(2, '0');
+    const day = numericMatch[3].padStart(2, '0');
+    const normalized = `${year}-${month}-${day}`;
+    return parseLocalDate(normalized) ? normalized : '';
+  }
+
+  // 2. 中文日期格式: 2026年8月31日
+  const cnMatch = cleaned.match(/^(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?$/);
+  if (cnMatch) {
+    const year = cnMatch[1];
+    const month = cnMatch[2].padStart(2, '0');
+    const day = cnMatch[3].padStart(2, '0');
+    const normalized = `${year}-${month}-${day}`;
+    return parseLocalDate(normalized) ? normalized : '';
+  }
+
+  // 3. 英文月份格式: "Mar 2, 2026" / "August 31, 2026"
+  const enMatch = cleaned.match(/^([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s*(\d{4})$/);
+  if (enMatch) {
+    const month = MONTH_MAP[enMatch[1].toLowerCase()];
+    if (!month) return '';
+    const day = enMatch[2].padStart(2, '0');
+    const normalized = `${enMatch[3]}-${month}-${day}`;
+    return parseLocalDate(normalized) ? normalized : '';
+  }
+
+  return '';
+}
+
+const SINGLE_DATE_PATTERN =
+  '(?:[A-Za-z]{3,9}\\.?\\s+\\d{1,2},?\\s*\\d{4}|\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}|\\d{4}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日?)';
+const DATE_RANGE_REGEX = new RegExp(
+  `(${SINGLE_DATE_PATTERN})\\s*(?:~|～|至|—|–|\\s-\\s)\\s*(${SINGLE_DATE_PATTERN})(?:\\s*[（(]\\s*(?:共\\s*)?(\\d+)\\s*(?:周)?\\s*[）)])?`
+);
+
+/**
+ * 从文本中提取开学日期、结束日期与总周数
+ */
+function extractDateRange(text: string): { startDate: string; endDate: string; totalWeeks: number } {
+  const rangeMatch = text.match(DATE_RANGE_REGEX);
+  if (!rangeMatch) {
+    return { startDate: '', endDate: '', totalWeeks: 0 };
+  }
+
+  const startDate = parseCalendarDate(rangeMatch[1]);
+  const endDate = parseCalendarDate(rangeMatch[2]);
+  let totalWeeks = rangeMatch[3] ? parseInt(rangeMatch[3], 10) : 0;
+
+  if (!totalWeeks && startDate && endDate) {
+    const start = parseLocalDate(startDate);
+    const end = parseLocalDate(endDate);
+    if (start && end && end.getTime() >= start.getTime()) {
+      const diffDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      totalWeeks = Math.ceil(diffDays / 7);
+    }
+  }
+
+  return { startDate, endDate, totalWeeks };
 }
 
 /**
  * 从校历 HTML 的头部信息中提取开学日期
- * 匹配格式: "Mar 2, 2026~Jul 5, 2026 (18)"
+ * 兼容英文 ("Mar 2, 2026~Jul 5, 2026 (18)")、ISO ("2026-08-31~2027-01-17") 与中文日期格式
  */
 export function extractStartDate(html: string): string | null {
-  const m = html.match(/(\w{3}\s+\d{1,2},\s*\d{4})\s*~\s*(\w{3}\s+\d{1,2},\s*\d{4})/);
-  if (!m) return null;
-  return parseEnglishDate(m[1]);
+  const header = parseHeader(html);
+  return header.startDate || null;
 }
 
 /**
@@ -46,46 +127,23 @@ function parseHeader(html: string): { semester: string; startDate: string; endDa
   const semMatch = html.match(/学年度\/学期：<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>/);
   const semester = semMatch ? semMatch[1].replace(/<[^>]*>/g, '').replace(/&nbsp;?/g, ' ').trim() : '';
 
-  // 日期范围: "Mar 2, 2026~Jul 5, 2026 (18)"
+  // 日期范围: "Mar 2, 2026~Jul 5, 2026 (18)" 或 "2026-08-31~2027-01-17 (20)"
   const dateMatch = html.match(/开始\/结束日期：<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>/);
-  let dateContent = dateMatch ? dateMatch[1].replace(/<[^>]*>/g, '').replace(/&nbsp;?/g, ' ').trim() : '';
-  // 清理多余空白（换行、多空格）
-  dateContent = dateContent.replace(/\s+/g, ' ').trim();
+  const dateContent = dateMatch
+    ? dateMatch[1].replace(/<[^>]*>/g, '').replace(/&nbsp;?/g, ' ').replace(/\s+/g, ' ').trim()
+    : '';
 
-  let startDate = '';
-  let endDate = '';
-  let totalWeeks = 0;
+  let { startDate, endDate, totalWeeks } = dateContent
+    ? extractDateRange(dateContent)
+    : { startDate: '', endDate: '', totalWeeks: 0 };
 
-  // 尝试匹配带括号的格式: "Mar 2, 2026~Jul 5, 2026 (18)"
-  let rangeMatch = dateContent.match(/(\w{3}\s+\d{1,2},\s*\d{4})\s*~\s*(\w{3}\s+\d{1,2},\s*\d{4})\s*\((\d+)\)/);
-  if (!rangeMatch) {
-    // 降级：不带括号的格式: "Mar 2, 2026~Jul 5, 2026"
-    rangeMatch = dateContent.match(/(\w{3}\s+\d{1,2},\s*\d{4})\s*~\s*(\w{3}\s+\d{1,2},\s*\d{4})/);
-  }
-
-  if (rangeMatch) {
-    startDate = parseEnglishDate(rangeMatch[1]);
-    endDate = parseEnglishDate(rangeMatch[2]);
-    if (rangeMatch[3]) {
-      totalWeeks = parseInt(rangeMatch[3], 10);
-    } else if (startDate && endDate) {
-      // 自动计算周数
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-      totalWeeks = Math.ceil(diffDays / 7);
-    }
-  }
-
-  // 如果上面都没匹配到，尝试从整个 HTML 中直接搜索日期模式
+  // 降级：从整个 HTML 中直接搜索日期范围模式
   if (!startDate) {
-    const fallback = html.match(/(\w{3}\s+\d{1,2},\s*\d{4})\s*~\s*(\w{3}\s+\d{1,2},\s*\d{4})/);
-    if (fallback) {
-      startDate = parseEnglishDate(fallback[1]);
-      endDate = parseEnglishDate(fallback[2]);
-      const weeksFallback = html.match(/\((\d+)\)/);
-      if (weeksFallback) totalWeeks = parseInt(weeksFallback[1], 10);
-    }
+    const plainHtml = html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;?/g, ' ').replace(/\s+/g, ' ');
+    const fallback = extractDateRange(plainHtml);
+    startDate = fallback.startDate;
+    endDate = fallback.endDate;
+    totalWeeks = fallback.totalWeeks;
   }
 
   return { semester, startDate, endDate, totalWeeks };
@@ -178,8 +236,12 @@ export function parseSchoolCalendar(html: string): SchoolCalendarData {
   };
 }
 
+function getCalendarCacheKey(semesterId?: number | string | null): string {
+  return semesterId ? `${CACHE_KEY}_${semesterId}` : CACHE_KEY;
+}
+
 /**
- * 获取校历数据
+ * 获取校历数据（含 SESSION_EXPIRED 自动重登重试）
  */
 export async function fetchSchoolCalendar(username: string, password: string, semesterId?: number): Promise<SchoolCalendarData> {
   try {
@@ -199,30 +261,74 @@ export async function fetchSchoolCalendar(username: string, password: string, se
 }
 
 /**
- * 仅获取开学日期（轻量调用，用于自动同步）
+ * 获取当前/指定学期的官方校历元数据（开学日期、结束日期、总周数）
+ * 直接从 schoolCalendar!search.action 提取，不依赖反推；同时写入按学期隔离的校历缓存
  */
-export async function fetchStartDate(username: string, password: string, semesterId?: number): Promise<string | null> {
+export async function fetchSemesterCalendarMeta(
+  username: string,
+  password: string,
+  semesterId?: number
+): Promise<SemesterCalendarMeta | null> {
   try {
-    const crawler = await getCrawler(username, password);
-    const html = await crawler.fetchSchoolCalendarHtml(semesterId);
-    return extractStartDate(html);
+    let crawler = await getCrawler(username, password);
+    let html: string;
+    try {
+      html = await crawler.fetchSchoolCalendarHtml(semesterId);
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message === 'SESSION_EXPIRED') {
+        const { invalidateSession } = await import('./session');
+        invalidateSession();
+        crawler = await getCrawler(username, password);
+        html = await crawler.fetchSchoolCalendarHtml(semesterId);
+      } else {
+        throw e;
+      }
+    }
+
+    const parsed = parseSchoolCalendar(html);
+    const resolvedSemesterId = semesterId ? String(semesterId) : crawler.getCurrentSemesterId();
+
+    if (parsed.startDate) {
+      cacheCalendar(parsed, resolvedSemesterId);
+      return {
+        semesterId: resolvedSemesterId,
+        semester: parsed.semester,
+        startDate: parsed.startDate,
+        endDate: parsed.endDate,
+        totalWeeks: parsed.totalWeeks
+      };
+    }
+
+    return null;
   } catch (e: unknown) {
-    console.error('[calendar] fetchStartDate failed:', e);
+    console.error('[calendar] fetchSemesterCalendarMeta failed:', e);
     return null;
   }
 }
 
 /**
- * 获取缓存（24h 过期）
+ * 仅获取开学日期（轻量调用，保留向后兼容）
  */
-export function getCachedCalendar(): SchoolCalendarData | null {
-  const cached = uni.getStorageSync(CACHE_KEY);
+export async function fetchStartDate(username: string, password: string, semesterId?: number): Promise<string | null> {
+  const meta = await fetchSemesterCalendarMeta(username, password, semesterId);
+  return meta?.startDate || null;
+}
+
+/**
+ * 获取缓存（支持按学期隔离；allowExpired=true 时允许离线降级读取过期缓存）
+ */
+export function getCachedCalendar(
+  semesterId?: number | string | null,
+  allowExpired: boolean = false
+): SchoolCalendarData | null {
+  const key = getCalendarCacheKey(semesterId);
+  const cached = uni.getStorageSync(key);
   if (!cached) return null;
 
   try {
     const data: CalendarCache = JSON.parse(cached);
     const age = Date.now() - data.lastFetchTime;
-    if (age < 24 * 60 * 60 * 1000) {
+    if (allowExpired || age < CACHE_TTL) {
       return data.data;
     }
     return null;
@@ -232,9 +338,13 @@ export function getCachedCalendar(): SchoolCalendarData | null {
 }
 
 /**
- * 写入缓存
+ * 写入缓存（按学期隔离，同时写入默认 key 兼容旧读取）
  */
-export function cacheCalendar(data: SchoolCalendarData): void {
+export function cacheCalendar(data: SchoolCalendarData, semesterId?: number | string | null): void {
   const cache: CalendarCache = { data, lastFetchTime: Date.now() };
-  uni.setStorageSync(CACHE_KEY, JSON.stringify(cache));
+  const serialized = JSON.stringify(cache);
+  if (semesterId) {
+    uni.setStorageSync(getCalendarCacheKey(semesterId), serialized);
+  }
+  uni.setStorageSync(CACHE_KEY, serialized);
 }

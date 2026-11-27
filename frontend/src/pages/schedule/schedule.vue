@@ -12,7 +12,9 @@
             <view class="capsule-arrow" @click="prevWeek">
               <text class="arrow-text">‹</text>
             </view>
-            <text class="capsule-week">第{{ currentWeek }}周</text>
+            <view class="capsule-week-btn" @click="showWeekPicker = true">
+              <text class="capsule-week">第{{ currentWeek }}周</text>
+            </view>
             <view class="capsule-arrow" @click="nextWeek">
               <text class="arrow-text">›</text>
             </view>
@@ -41,8 +43,13 @@
       </view>
     </view>
 
-    <!-- 课表网格 -->
-    <view v-else class="grid-wrapper">
+    <!-- 课表网格（支持左右滑切周 + 无课周提示） -->
+    <view
+      v-else
+      class="grid-wrapper"
+      @touchstart="onGridTouchStart"
+      @touchend="onGridTouchEnd"
+    >
       <ScheduleGrid
         :courses="displayCourses"
         highlight-today
@@ -51,6 +58,25 @@
         :current-week="currentWeek"
         @course-click="showCourseDetail"
       />
+
+      <!-- 本周无课轻量引导卡片 -->
+      <view v-if="isCurrentWeekEmpty" class="empty-week-overlay">
+        <view class="empty-week-card">
+          <view class="empty-week-tag">
+            <text class="empty-week-tag-text">FREE WEEK</text>
+          </view>
+          <text class="empty-week-title">第 {{ currentWeek }} 周暂无排课</text>
+          <text class="empty-week-desc">左右滑动网格，或点击下方快速切换周次</text>
+          <view class="empty-week-actions">
+            <view v-if="nearestActiveWeek" class="empty-week-btn btn-primary" @click="selectWeek(nearestActiveWeek)">
+              <text class="empty-week-btn-text">去第{{ nearestActiveWeek }}周</text>
+            </view>
+            <view class="empty-week-btn btn-secondary" @click="showWeekPicker = true">
+              <text class="empty-week-btn-text-dark">选择周次</text>
+            </view>
+          </view>
+        </view>
+      </view>
     </view>
 
     <CourseDetailModal
@@ -63,6 +89,14 @@
       :initial-date="semesterStart"
       @close="showCalendar = false"
       @select-date="onSelectDate"
+    />
+    <MangaPicker
+      :visible="showWeekPicker"
+      title="切换周次"
+      :options="weekPickerOptions"
+      :selected-index="currentWeek - 1"
+      @select="onSelectWeekIndex"
+      @close="showWeekPicker = false"
     />
 
     <MangaToast :visible="showRefreshToast" message="刷新成功" @hide="showRefreshToast = false" />
@@ -78,10 +112,12 @@ import { useScheduleStore } from '@/stores/schedule';
 import { syncSchedule } from '@/api/schedule';
 import { readPassword, encryptPassword } from '@/utils/crypto';
 import { scheduleCachedTodayReminders } from '@/utils/reminder';
+import { calculateWeekNumber, filterByWeek } from '@/utils/schedule';
 import type { RenderCourse } from '@/types';
 
 import CourseDetailModal from '@/components/CourseDetailModal.vue';
 import CustomCalendar from '@/components/CustomCalendar.vue';
+import MangaPicker, { type PickerOptionItem } from '@/components/MangaPicker.vue';
 import ScheduleGrid from '@/components/ScheduleGrid.vue';
 import TabBar from '@/components/TabBar.vue';
 import MangaToast from '@/components/MangaToast.vue';
@@ -94,6 +130,7 @@ function selectWeek(week: number) {
 
 const showDetail = ref(false);
 const showRefreshToast = ref(false);
+const showWeekPicker = ref(false);
 const selectedCourse = ref<RenderCourse | null>(null);
 
 const currentWeek = computed(() => scheduleStore.currentWeek);
@@ -104,6 +141,73 @@ const displayCourses = computed(() => {
 });
 const semesterStart = computed(() => scheduleStore.semesterStart);
 const userInfo = computed(() => scheduleStore.userInfo);
+
+const realCurrentWeek = computed(() => calculateWeekNumber(semesterStart.value));
+
+const isCurrentWeekEmpty = computed(() => {
+  return scheduleStore.courses.length > 0 && displayCourses.value.length === 0;
+});
+
+// 距离当前查看周次最近的有课周（方便无课周一键跳转）
+const nearestActiveWeek = computed<number | null>(() => {
+  if (scheduleStore.courses.length === 0) return null;
+  let bestWeek: number | null = null;
+  let bestDist = Infinity;
+  for (let w = 1; w <= totalWeeks.value; w++) {
+    if (filterByWeek(scheduleStore.courses, w).length > 0) {
+      const dist = Math.abs(w - currentWeek.value);
+      if (dist > 0 && dist < bestDist) {
+        bestDist = dist;
+        bestWeek = w;
+      }
+    }
+  }
+  return bestWeek;
+});
+
+const weekPickerOptions = computed<PickerOptionItem[]>(() => {
+  const list: PickerOptionItem[] = [];
+  for (let w = 1; w <= totalWeeks.value; w++) {
+    const hasCourses = filterByWeek(scheduleStore.courses, w).length > 0;
+    const isNow = w === realCurrentWeek.value;
+    list.push({
+      id: w,
+      label: `第 ${w} 周`,
+      badge: isNow ? '本周' : hasCourses ? '有课' : '无课',
+      badgeClass: isNow ? 'badge-today' : hasCourses ? '' : 'badge-muted'
+    });
+  }
+  return list;
+});
+
+function onSelectWeekIndex(index: number) {
+  selectWeek(index + 1);
+}
+
+// 左右轻扫切周手势
+let touchStartX = 0;
+let touchStartY = 0;
+
+function onGridTouchStart(e: { touches?: Array<{ clientX: number; clientY: number }> }) {
+  const touch = e.touches?.[0];
+  if (!touch) return;
+  touchStartX = touch.clientX;
+  touchStartY = touch.clientY;
+}
+
+function onGridTouchEnd(e: { changedTouches?: Array<{ clientX: number; clientY: number }> }) {
+  const touch = e.changedTouches?.[0];
+  if (!touch) return;
+  const dx = touch.clientX - touchStartX;
+  const dy = touch.clientY - touchStartY;
+  if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    if (dx < 0) {
+      nextWeek();
+    } else {
+      prevWeek();
+    }
+  }
+}
 
 function formatSyncTime(isoString: string): string {
   if (!isoString) return '未知';
@@ -149,11 +253,7 @@ function onSelectDate(dateStr: string) {
 }
 
 function goToCurrentWeek() {
-  const start = new Date(semesterStart.value);
-  const today = new Date();
-  const diffTime = today.getTime() - start.getTime();
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  const week = Math.floor(diffDays / 7) + 1;
+  const week = calculateWeekNumber(semesterStart.value);
   
   if (week < 1) {
     uni.showToast({ title: '学期尚未开始', icon: 'none' });
@@ -336,11 +436,16 @@ onPullDownRefresh(() => {
   line-height: 1;
 }
 
+.capsule-week-btn {
+  display: flex;
+  align-items: center;
+  padding: 0 6rpx;
+}
+
 .capsule-week {
   font-size: 24rpx;
   font-weight: 900;
   color: #000000;
-  padding: 0 6rpx;
   white-space: nowrap;
 }
 
@@ -371,6 +476,111 @@ onPullDownRefresh(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+}
+
+/* 本周无课浮动提示卡（避让左侧 100rpx 时间栏） */
+.empty-week-overlay {
+  position: absolute;
+  top: 220rpx;
+  left: 100rpx;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  padding: 0 28rpx;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.empty-week-card {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 560rpx;
+  background: #FFFFFF;
+  border: 4rpx solid #000000;
+  border-radius: 28rpx;
+  box-shadow: 8rpx 8rpx 0 #000000;
+  padding: 36rpx 32rpx 32rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.empty-week-tag {
+  position: absolute;
+  top: -22rpx;
+  left: 28rpx;
+  padding: 4rpx 16rpx;
+  background: #55EFC4;
+  border: 3rpx solid #000000;
+  box-shadow: 3rpx 3rpx 0 #000000;
+  transform: rotate(-2deg);
+}
+
+.empty-week-tag-text {
+  font-size: 18rpx;
+  font-weight: 900;
+  color: #000000;
+  letter-spacing: 2rpx;
+}
+
+.empty-week-title {
+  font-size: 32rpx;
+  font-weight: 900;
+  color: #000000;
+  margin-top: 8rpx;
+  margin-bottom: 10rpx;
+}
+
+.empty-week-desc {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #71717A;
+  text-align: center;
+  margin-bottom: 24rpx;
+}
+
+.empty-week-actions {
+  display: flex;
+  gap: 16rpx;
+  width: 100%;
+}
+
+.empty-week-btn {
+  flex: 1;
+  height: 72rpx;
+  border-radius: 16rpx;
+  border: 3rpx solid #000000;
+  box-shadow: 4rpx 4rpx 0 #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty-week-btn:active {
+  transform: translate(3rpx, 3rpx);
+  box-shadow: 0 0 0 #000000;
+}
+
+.btn-primary {
+  background: #FFEAA7;
+}
+
+.btn-secondary {
+  background: #FFFFFF;
+}
+
+.empty-week-btn-text {
+  font-size: 24rpx;
+  font-weight: 900;
+  color: #000000;
+}
+
+.empty-week-btn-text-dark {
+  font-size: 24rpx;
+  font-weight: 900;
+  color: #000000;
 }
 
 /* 骨架屏 */

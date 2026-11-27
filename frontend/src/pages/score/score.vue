@@ -8,12 +8,10 @@
       </view>
       <!-- 学期选择器 (黑色胶囊) -->
       <view class="semester-row">
-        <picker @change="onSemesterChange" :value="semesterIndex" :range="semesterList" range-key="label">
-          <view class="semester-pill">
-            <text class="semester-pill-text">{{ currentSemesterLabel || '选择学期' }}</text>
-            <view class="pill-chevron"></view>
-          </view>
-        </picker>
+        <view class="semester-pill" @click="showSemesterPicker = true">
+          <text class="semester-pill-text">{{ currentSemesterLabel || '选择学期' }}</text>
+          <view class="pill-chevron"></view>
+        </view>
       </view>
     </view>
 
@@ -134,9 +132,27 @@
 
       <!-- 空状态 -->
       <view v-if="!loading && grades.length === 0" class="empty-state">
-        <text class="empty-text">{{ emptyMessage }}</text>
+        <view class="empty-card">
+          <view class="empty-tag">
+            <text class="empty-tag-text">NO GRADES</text>
+          </view>
+          <text class="empty-title">{{ emptyTitle }}</text>
+          <text class="empty-text">{{ emptyMessage }}</text>
+          <view v-if="semesterList.length > 1" class="empty-switch-btn" @click="showSemesterPicker = true">
+            <text class="empty-switch-text">切换其他学期</text>
+          </view>
+        </view>
       </view>
     </scroll-view>
+
+    <MangaPicker
+      :visible="showSemesterPicker"
+      title="选择成绩学期"
+      :options="semesterList"
+      :selected-index="semesterIndex"
+      @select="onSemesterSelect"
+      @close="showSemesterPicker = false"
+    />
 
     <TabBar current="score" />
   </view>
@@ -146,39 +162,37 @@
 import { ref, computed, onMounted } from 'vue';
 import type { Grade } from '@/types/grade';
 import TabBar from '@/components/TabBar.vue';
+import MangaPicker from '@/components/MangaPicker.vue';
 import { fetchGrades, getCachedGrades, cacheGrades } from '@/utils/grade';
 import { readPassword } from '@/utils/crypto';
+import { loadSemesterOptions, type SemesterOption } from '@/utils/semester';
+import { useScheduleStore } from '@/stores/schedule';
 
-interface Semester {
-  id: number;
-  schoolYear: string;
-  name: string;
-}
-
+const scheduleStore = useScheduleStore();
 const loading = ref(false);
-const semesters = ref<Semester[]>([]);
+const semesterList = ref<SemesterOption[]>([]);
 const semesterIndex = ref(0);
+const showSemesterPicker = ref(false);
 const grades = ref<Grade[]>([]);
 const expandedCard = ref<number | null>(null);
 const isLoadingSemesters = ref(false);
 
-// 学期列表（用于picker选择器）
-const semesterList = computed(() => semesters.value.map(s => ({
-  id: s.id,
-  label: `${s.schoolYear} 学期${s.name}`
-})));
-
 // 当前学期标签
 const currentSemesterLabel = computed(() => {
-  if (semesters.value.length === 0) return '';
-  const current = semesters.value[semesterIndex.value];
-  return current ? `${current.schoolYear} 学期${current.name}` : '';
+  return semesterList.value[semesterIndex.value]?.label || '';
+});
+
+const emptyTitle = computed(() => {
+  if (semesterList.value.length === 0) return '加载中';
+  if (semesterIndex.value === 0) return '本学期暂未出分';
+  return '暂无成绩记录';
 });
 
 // 空状态消息
 const emptyMessage = computed(() => {
-  if (semesters.value.length === 0) return '正在加载学期列表...';
-  return '暂无成绩数据';
+  if (semesterList.value.length === 0) return '正在加载学期列表...';
+  if (semesterIndex.value === 0) return '期末成绩发布后会自动同步，也可以先看看往期成绩';
+  return '该学期教务系统暂无可展示的成绩记录';
 });
 
 // 总学分
@@ -218,71 +232,24 @@ onMounted(async () => {
 async function loadSemesters() {
   loading.value = true;
   try {
-    const cachedSemesters = uni.getStorageSync('history_semesters');
-    
-    if (cachedSemesters && cachedSemesters.semesters) {
-      semesters.value = cachedSemesters.semesters.map((s: { id: number; schoolYear: string; name: string }) => ({
-        id: s.id,
-        schoolYear: s.schoolYear,
-        name: s.name
-      })).reverse();
-      
-      if (semesters.value.length > 1) {
-        semesterIndex.value = 1;
-        await loadGrades(semesters.value[1].id);
-      } else if (semesters.value.length > 0) {
-        semesterIndex.value = 0;
-        await loadGrades(semesters.value[0].id);
-      }
-    } else {
-      const cachedUser = uni.getStorageSync('userInfo');
-      if (!cachedUser) {
-        uni.showToast({ title: '请先登录', icon: 'none' });
-        loading.value = false;
-        return;
-      }
-      
-      const { username, password: storedPwd } = JSON.parse(cachedUser);
-      const password = readPassword(storedPwd, username);
-      if (!username || !password) {
-        uni.showToast({ title: '请先登录', icon: 'none' });
-        loading.value = false;
-        return;
-      }
-      
-      const { getCrawler } = await import('@/utils/session');
-      const crawler = await getCrawler(username, password);
-      
-      const fetchOk = await crawler.fetchSemesters();
-      if (!fetchOk) {
-        uni.showToast({ title: '获取学期列表失败', icon: 'none' });
-        loading.value = false;
-        return;
-      }
-      
-      const rawSemesters = crawler.getSemesters();
-      semesters.value = rawSemesters.map(s => ({
-        id: s.id,
-        schoolYear: s.schoolYear,
-        name: s.name
-      })).reverse();
-      
-      uni.setStorageSync('history_semesters', {
-        semesters: rawSemesters,
-        lastFetchTime: Date.now()
-      });
-      
-      if (semesters.value.length > 1) {
-        semesterIndex.value = 1;
-        await loadGrades(semesters.value[1].id);
-      } else if (semesters.value.length > 0) {
-        semesterIndex.value = 0;
-        await loadGrades(semesters.value[0].id);
-      }
+    const { options, defaultIndex } = await loadSemesterOptions('upToCurrent');
+    semesterList.value = options;
+
+    // 优先恢复同会话内已选中的学期，切 Tab 再回来不会重置
+    const rememberedIdx = scheduleStore.selectedScoreSemesterId !== null
+      ? options.findIndex(o => o.id === scheduleStore.selectedScoreSemesterId)
+      : -1;
+    const targetIdx = rememberedIdx >= 0 ? rememberedIdx : defaultIndex;
+    semesterIndex.value = targetIdx;
+
+    const target = options[targetIdx];
+    if (target) {
+      await loadGrades(target.id);
     }
   } catch (e: unknown) {
     console.error('[Score] Load semesters failed:', e);
-    uni.showToast({ title: '加载失败', icon: 'none' });
+    const msg = e instanceof Error && e.message === 'NOT_LOGGED_IN' ? '请先登录' : '加载学期列表失败';
+    uni.showToast({ title: msg, icon: 'none' });
   } finally {
     loading.value = false;
   }
@@ -327,11 +294,13 @@ async function loadGrades(semesterId: number) {
   }
 }
 
-function onSemesterChange(e: { detail: { value: number } }) {
-  const index = e.detail.value;
+function onSemesterSelect(index: number) {
+  if (index === semesterIndex.value) return;
   semesterIndex.value = index;
-  const semester = semesters.value[index];
+  expandedCard.value = null;
+  const semester = semesterList.value[index];
   if (semester) {
+    scheduleStore.selectedScoreSemesterId = semester.id;
     loadGrades(semester.id);
   }
 }
@@ -353,7 +322,9 @@ function getScoreColor(score: number | null): string {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #FFFFFF;
+  background: #F4F4F5;
+  background-image: radial-gradient(#D4D4D8 1.5px, transparent 1.5px);
+  background-size: 20px 20px;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -361,7 +332,8 @@ function getScoreColor(score: number | null): string {
 /* ===== Header ===== */
 .page-header {
   background: #FFFFFF;
-  padding: 0 40rpx 24rpx;
+  padding: 0 40rpx 20rpx;
+  border-bottom: 3rpx solid #000000;
 }
 
 .status-bar {
@@ -453,12 +425,13 @@ function getScoreColor(score: number | null): string {
 
 .stat-card {
   flex: 1;
-  background: #F9FAFB;
-  border-radius: 28rpx;
-  padding: 32rpx;
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 28rpx 30rpx;
   display: flex;
   flex-direction: column;
-  border: 2rpx solid #F3F4F6;
+  border: 3rpx solid #000000;
+  box-shadow: 4rpx 4rpx 0 #000000;
 }
 
 .stat-sup {
@@ -494,15 +467,17 @@ function getScoreColor(score: number | null): string {
 }
 
 .grade-card {
-  border-radius: 28rpx;
-  border: 2rpx solid #E5E7EB;
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  border: 3rpx solid #000000;
+  box-shadow: 4rpx 4rpx 0 #000000;
   overflow: hidden;
-  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .grade-card-expanded {
-  border-color: #0A0A0A;
-  box-shadow: 0 8rpx 32rpx -12rpx rgba(0, 0, 0, 0.12);
+  border-color: #000000;
+  box-shadow: 6rpx 6rpx 0 #000000;
 }
 
 /* ===== Card top ===== */
@@ -750,18 +725,82 @@ function getScoreColor(score: number | null): string {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding-top: 200rpx;
+  padding: 160rpx 48rpx 0;
+}
+
+.empty-card {
+  position: relative;
+  width: 100%;
+  max-width: 560rpx;
+  background: #FFFFFF;
+  border: 4rpx solid #000000;
+  border-radius: 28rpx;
+  box-shadow: 8rpx 8rpx 0 #000000;
+  padding: 44rpx 36rpx 36rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.empty-tag {
+  position: absolute;
+  top: -22rpx;
+  left: 28rpx;
+  padding: 4rpx 18rpx;
+  background: #FF7675;
+  border: 3rpx solid #000000;
+  box-shadow: 3rpx 3rpx 0 #000000;
+  transform: rotate(-2deg);
+}
+
+.empty-tag-text {
+  font-size: 18rpx;
+  font-weight: 900;
+  color: #FFFFFF;
+  letter-spacing: 2rpx;
+}
+
+.empty-title {
+  font-size: 32rpx;
+  font-weight: 900;
+  color: #000000;
+  margin-bottom: 12rpx;
 }
 
 .empty-text {
-  font-size: 28rpx;
-  color: #9CA3AF;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #71717A;
+  text-align: center;
+  line-height: 1.5;
+  margin-bottom: 28rpx;
+}
+
+.empty-switch-btn {
+  padding: 18rpx 40rpx;
+  background: #FFEAA7;
+  border: 3rpx solid #000000;
+  border-radius: 16rpx;
+  box-shadow: 4rpx 4rpx 0 #000000;
+}
+
+.empty-switch-btn:active {
+  transform: translate(3rpx, 3rpx);
+  box-shadow: 0 0 0 #000000;
+}
+
+.empty-switch-text {
+  font-size: 26rpx;
+  font-weight: 900;
+  color: #000000;
+  letter-spacing: 2rpx;
 }
 
 /* ===== Footer ===== */
 .list-footer {
   text-align: center;
-  padding: 40rpx 0 24rpx;
+  padding: 40rpx 0 180rpx;
 }
 
 .footer-text {

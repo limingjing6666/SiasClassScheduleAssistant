@@ -46,14 +46,17 @@
           :style="getCourseStyle(course)"
           @click="onCourseClick(course)"
         >
-          <view class="course-inner">
+          <view class="course-inner" :class="{ 'course-inner-compact': course.step <= 1 }">
             <template v-if="detailMode">
-              <text class="course-name-detail">{{ course.name }} ({{ course.teacher }})</text>
-              <text class="course-detail-text">({{ detailMap[index] }})</text>
+              <text class="course-name-detail" :class="{ 'course-name-single': course.step <= 1 }">{{ course.name }}</text>
+              <view class="course-detail-meta">
+                <text v-if="detailWeeksMap[index]" class="course-detail-weeks">{{ detailWeeksMap[index] }}</text>
+                <text v-if="roomShortMap[index] && course.step > 1" class="course-detail-room">{{ roomShortMap[index] }}</text>
+              </view>
             </template>
             <template v-else>
-              <text class="course-name">{{ course.name }}</text>
-              <view class="course-tag">
+              <text class="course-name" :class="{ 'course-name-single': course.step <= 1 }">{{ course.name }}</text>
+              <view v-if="roomShortMap[index]" class="course-tag">
                 <text class="course-tag-text">{{ roomShortMap[index] }}</text>
               </view>
             </template>
@@ -68,7 +71,7 @@
 import { computed } from 'vue';
 import type { RenderCourse } from '@/types';
 import { COURSE_THEMES } from '@/config/themes';
-import { NODE_TIMES, weeksToLabel, getDayLabel } from '@/utils/schedule';
+import { NODE_TIMES, weeksToLabel, parseLocalDate } from '@/utils/schedule';
 
 const props = withDefaults(defineProps<{
   courses: RenderCourse[];
@@ -88,12 +91,10 @@ const emit = defineEmits<{
   (e: 'course-click', course: RenderCourse): void;
 }>();
 
-const detailMap = computed(() => {
+const detailWeeksMap = computed(() => {
   return props.courses.map(c => {
     const wl = weeksToLabel(c.weeks);
-    const dl = getDayLabel(c.day);
-    const room = c.room || '';
-    return `${wl},${dl},${c.nodes}节,${room}`;
+    return wl ? `${wl}周` : '';
   });
 });
 
@@ -112,7 +113,21 @@ const NODE_HEIGHT = 100;
 const DAY_WIDTH = 100 / 7;
 
 function isToday(day: number): boolean {
-  const today = new Date().getDay();
+  const now = new Date();
+  // 有开学日期时按真实日历日期判断，避免切换历史/未来周时同星期仍误高亮为“今天”
+  if (props.semesterStart) {
+    const start = parseLocalDate(props.semesterStart);
+    if (start) {
+      const target = new Date(start);
+      target.setDate(start.getDate() + (props.currentWeek - 1) * 7 + (day - 1));
+      return (
+        target.getFullYear() === now.getFullYear() &&
+        target.getMonth() === now.getMonth() &&
+        target.getDate() === now.getDate()
+      );
+    }
+  }
+  const today = now.getDay();
   const adjustedToday = today === 0 ? 7 : today;
   return adjustedToday === day;
 }
@@ -124,7 +139,8 @@ function getShortDayName(day: number): string {
 
 function getDateOfDay(day: number): string {
   if (!props.semesterStart) return '';
-  const start = new Date(props.semesterStart);
+  const start = parseLocalDate(props.semesterStart);
+  if (!start) return '';
   const daysFromStart = (props.currentWeek - 1) * 7 + (day - 1);
   const targetDate = new Date(start);
   targetDate.setDate(start.getDate() + daysFromStart);
@@ -351,21 +367,55 @@ function onCourseClick(course: RenderCourse) {
   line-height: 1.2;
 }
 
-/* 历史课表详细模式 */
-.course-name-detail {
-  font-size: 18rpx;
-  font-weight: 700;
-  line-height: 1.25;
-  word-break: break-all;
-  overflow: hidden;
+.course-inner-compact {
+  padding: 6rpx 6rpx;
 }
 
-.course-detail-text {
-  font-size: 16rpx;
-  font-weight: 600;
-  line-height: 1.2;
+.course-name-single {
+  -webkit-line-clamp: 2 !important;
+  font-size: 18rpx !important;
+  line-height: 1.2 !important;
+}
+
+/* 历史课表详细模式：固定标题不收缩，防止中文被腰斩 */
+.course-name-detail {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  font-weight: 800;
+  line-height: 1.28;
   word-break: break-all;
-  opacity: 0.75;
-  margin-top: 4rpx;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.course-detail-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2rpx;
+  margin-top: 6rpx;
+  flex-shrink: 0;
+}
+
+.course-detail-weeks {
+  font-size: 16rpx;
+  font-weight: 800;
+  font-family: monospace;
+  letter-spacing: -0.5rpx;
+  line-height: 1.15;
+  opacity: 0.78;
+}
+
+.course-detail-room {
+  font-size: 16rpx;
+  font-weight: 700;
+  font-family: monospace;
+  letter-spacing: -0.5rpx;
+  line-height: 1.15;
+  opacity: 0.65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

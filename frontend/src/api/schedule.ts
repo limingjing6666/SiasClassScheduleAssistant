@@ -8,19 +8,30 @@
 import type { Course, SyncRequest } from '@/types';
 import type { ProgressCallback } from '@/types/progress';
 import { fetchSchedule as crawlerFetch, translateError } from '@/utils/crawler';
-import { fetchStartDate } from '@/utils/calendar';
+import { fetchSemesterCalendarMeta } from '@/utils/calendar';
+import { getCrawler } from '@/utils/session';
 import { useScheduleStore } from '@/stores/schedule';
 
 /**
  * 同步课表
- * 直接调用爬虫登录教务系统并抓取课表数据
+ * 直接调用爬虫登录教务系统并抓取课表数据，同时直接拉取当前学期的官方校历开学日期与总周数
  */
 export async function syncSchedule(params: SyncRequest, onProgress?: ProgressCallback): Promise<Course[]> {
   try {
-    const courses = await crawlerFetch(params.username, params.password, onProgress);
+    const wrappedProgress: ProgressCallback | undefined = onProgress
+      ? (percent, status) => {
+          // 为随后的校历同步保留 90%~100% 进度区间
+          const mapped = percent >= 100 ? 90 : Math.min(percent, 88);
+          onProgress(mapped, mapped >= 90 ? '同步学期校历...' : status);
+        }
+      : undefined;
 
-    // ★ 自动从校历同步开学日期（异步，不阻塞课表返回）
-    syncStartDateInBackground(params.username, params.password);
+    const courses = await crawlerFetch(params.username, params.password, wrappedProgress);
+
+    // ★ 直接从当前学期校历同步开学日期与总周数（失败不影响课表返回）
+    onProgress?.(94, '同步开学日期...');
+    await syncSemesterCalendar(params.username, params.password);
+    onProgress?.(100, '同步完成');
 
     return courses;
   } catch (err: unknown) {
@@ -31,26 +42,35 @@ export async function syncSchedule(params: SyncRequest, onProgress?: ProgressCal
 }
 
 /**
- * 后台同步开学日期（不阻塞主流程）
+ * 同步当前学期的官方开学日期与总周数
+ * 复用已登录的 crawler session，在进入课表页和注册提醒前完成状态更新
  */
-function syncStartDateInBackground(username: string, password: string): void {
-  fetchStartDate(username, password)
-    .then((startDate) => {
-      if (startDate) {
-        const cached = uni.getStorageSync('semesterStart');
-        if (cached !== startDate) {
-          uni.setStorageSync('semesterStart', startDate);
-          // 同步更新 Pinia store 内存（避免需要重启才生效）
-          try {
-            const store = useScheduleStore();
-            store.setSemesterStart(startDate);
-          } catch { /* store 未初始化时忽略 */ }
-          console.log('[schedule] Auto-synced semester start date:', startDate);
-        }
+async function syncSemesterCalendar(username: string, password: string): Promise<void> {
+  try {
+    const meta = await fetchSemesterCalendarMeta(username, password);
+    const store = useScheduleStore();
+
+    if (meta && meta.startDate) {
+      store.applySemesterCalendar(meta);
+      console.log('[schedule] Auto-synced semester calendar:', meta);
+      return;
+    }
+
+    // 校历接口未能解析时，尝试回退到该学期历史已保存的开学日期
+    const crawler = await getCrawler(username, password);
+    const semId = crawler.getCurrentSemesterId();
+    if (semId) {
+      const saved = store.getSavedSemesterMeta(semId);
+      if (saved?.startDate) {
+        store.applySemesterCalendar({
+          semesterId: semId,
+          ...saved
+        });
+        console.log('[schedule] Applied saved semester calendar fallback:', semId, saved.startDate);
       }
-    })
-    .catch((e) => {
-      console.warn('[schedule] Auto-sync start date failed:', e);
-    });
+    }
+  } catch (e) {
+    console.warn('[schedule] Auto-sync semester calendar failed:', e);
+  }
 }
 

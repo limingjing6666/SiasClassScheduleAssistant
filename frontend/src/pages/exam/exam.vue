@@ -12,21 +12,17 @@
     <view class="filter-bar">
       <view class="filter-item">
         <text class="filter-label">学期</text>
-        <picker @change="onSemesterChange" :value="semesterIndex" :range="semesterList" range-key="label">
-          <view class="filter-picker">
-            <text class="filter-value">{{ currentSemesterLabel || '选择学期' }}</text>
-            <text class="filter-arrow">&#9660;</text>
-          </view>
-        </picker>
+        <view class="filter-picker" @click="showSemesterPicker = true">
+          <text class="filter-value">{{ currentSemesterLabel || '选择学期' }}</text>
+          <text class="filter-arrow">&#9660;</text>
+        </view>
       </view>
       <view v-if="batches.length > 0" class="filter-item">
         <text class="filter-label">考试批次</text>
-        <picker @change="onBatchPickerChange" :value="batchIndex" :range="batchPickerList" range-key="label">
-          <view class="filter-picker">
-            <text class="filter-value">{{ currentBatchLabel || '选择考试批次' }}</text>
-            <text class="filter-arrow">&#9660;</text>
-          </view>
-        </picker>
+        <view class="filter-picker" @click="showBatchPicker = true">
+          <text class="filter-value">{{ currentBatchLabel || '选择考试批次' }}</text>
+          <text class="filter-arrow">&#9660;</text>
+        </view>
       </view>
     </view>
 
@@ -98,6 +94,22 @@
         <text class="retry-text">重试</text>
       </view>
     </view>
+    <MangaPicker
+      :visible="showSemesterPicker"
+      title="选择学期"
+      :options="semesterList"
+      :selected-index="semesterIndex"
+      @select="onSemesterSelect"
+      @close="showSemesterPicker = false"
+    />
+    <MangaPicker
+      :visible="showBatchPicker"
+      title="选择考试批次"
+      :options="batchPickerList"
+      :selected-index="batchIndex"
+      @select="onBatchSelect"
+      @close="showBatchPicker = false"
+    />
   </view>
 </template>
 
@@ -105,30 +117,21 @@
 import { ref, computed, onMounted } from 'vue';
 import type { ExamData, ExamBatch } from '@/types/exam';
 import { fetchExamBatches, fetchExams, cacheExams } from '@/utils/exam';
-import { getCrawler } from '@/utils/session';
 import { readPassword } from '@/utils/crypto';
-
-interface Semester {
-  id: number;
-  schoolYear: string;
-  name: string;
-}
+import { loadSemesterOptions, type SemesterOption } from '@/utils/semester';
+import MangaPicker from '@/components/MangaPicker.vue';
 
 const loading = ref(false);
 const examData = ref<ExamData>({ scheduled: [], unscheduled: [] });
 const errorMsg = ref('');
-const semesters = ref<Semester[]>([]);
+const semesterList = ref<SemesterOption[]>([]);
 const semesterIndex = ref(0);
+const showSemesterPicker = ref(false);
 const batches = ref<ExamBatch[]>([]);
 const batchIndex = ref(0);
-
-const semesterList = computed(() => semesters.value.map(s => ({
-  id: s.id,
-  label: `${s.schoolYear} 学期${s.name}`
-})));
+const showBatchPicker = ref(false);
 
 const currentSemesterLabel = computed(() => {
-  if (semesterList.value.length === 0) return '';
   return semesterList.value[semesterIndex.value]?.label || '';
 });
 
@@ -165,32 +168,22 @@ onMounted(async () => {
 
 async function loadSemesters() {
   try {
-    const cachedSemesters = uni.getStorageSync('history_semesters');
-    if (cachedSemesters && cachedSemesters.semesters) {
-      semesters.value = cachedSemesters.semesters.map((s: { id: number; schoolYear: string; name: string }) => ({
-        id: s.id, schoolYear: s.schoolYear, name: s.name
-      })).reverse();
-    } else {
-      const user = getUserInfo();
-      if (!user) return;
-      const crawler = await getCrawler(user.username, user.password);
-      await crawler.fetchSemesters();
-      const rawSemesters = crawler.getSemesters();
-      semesters.value = rawSemesters.map(s => ({ id: s.id, schoolYear: s.schoolYear, name: s.name })).reverse();
-      uni.setStorageSync('history_semesters', { semesters: rawSemesters, lastFetchTime: Date.now() });
-    }
-    if (semesters.value.length > 0) {
-      semesterIndex.value = 0;
-      await loadBatches(semesters.value[0].id);
+    const { options, defaultIndex } = await loadSemesterOptions('upToCurrent');
+    semesterList.value = options;
+    semesterIndex.value = defaultIndex;
+
+    const target = options[defaultIndex];
+    if (target) {
+      await loadBatches(target.id);
     }
   } catch (e: unknown) {
     console.error('[Exam] Load semesters failed:', e);
-    errorMsg.value = '加载学期列表失败';
+    errorMsg.value = e instanceof Error && e.message === 'NOT_LOGGED_IN' ? '请先登录' : '加载学期列表失败';
   }
 }
 
-async function onSemesterChange(e: { detail: { value: number } }) {
-  const index = e.detail.value;
+async function onSemesterSelect(index: number) {
+  if (index === semesterIndex.value) return;
   semesterIndex.value = index;
   const semester = semesterList.value[index];
   if (semester) {
@@ -235,8 +228,7 @@ async function loadBatches(semesterId: number) {
   }
 }
 
-async function onBatchPickerChange(e: { detail: { value: number } }) {
-  const idx = e.detail.value;
+async function onBatchSelect(idx: number) {
   if (idx === batchIndex.value) return;
   batchIndex.value = idx;
   const batch = batches.value[idx];

@@ -185,6 +185,47 @@ export const NODE_TIMES: Record<number, { start: string; end: string }> = {
 };
 
 /**
+ * 按本地时区零点解析 YYYY-MM-DD 日期字符串
+ * 避免 `new Date('YYYY-MM-DD')` 按 UTC 00:00（北京时间 08:00）解析导致周一早 8 点前周次少算 1 周
+ */
+export function parseLocalDate(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  const m = dateStr.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!m) return null;
+
+  const year = parseInt(m[1], 10);
+  const month = parseInt(m[2], 10);
+  const day = parseInt(m[3], 10);
+  const date = new Date(year, month - 1, day);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+  return date;
+}
+
+/**
+ * 计算指定日期距离开学日期是第几周（1-based，未做上下限裁剪）
+ * 返回值 < 1 表示学期尚未开始，> totalWeeks 表示已超出学期
+ */
+export function calculateWeekNumber(semesterStart: string, referenceDate: Date = new Date()): number {
+  const start = parseLocalDate(semesterStart);
+  if (!start) return 1;
+
+  const today = new Date(
+    referenceDate.getFullYear(),
+    referenceDate.getMonth(),
+    referenceDate.getDate()
+  );
+  const diffDays = Math.round((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.floor(diffDays / 7) + 1;
+}
+
+/**
  * 获取节次时间范围字符串（如 "08:00-09:40"）
  */
 export function getNodeTimeRange(startNode: number, endNode: number): string {
