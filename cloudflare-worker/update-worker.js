@@ -28,6 +28,101 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+function renderInlineMarkdown(text) {
+  const codeSpans = [];
+  const withPlaceholders = String(text || '').replace(/`([^`]+)`/g, (_, code) => {
+    const idx = codeSpans.length;
+    codeSpans.push(`<code>${escapeHtml(code)}</code>`);
+    return `\u0000CODE${idx}\u0000`;
+  });
+
+  let html = escapeHtml(withPlaceholders)
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+
+  html = html.replace(/\u0000CODE(\d+)\u0000/g, (_, idx) => codeSpans[Number(idx)] || '');
+  return html;
+}
+
+/**
+ * 轻量 XSS 安全 Markdown 渲染（支持标题、无序/有序列表、加粗、斜体、行内代码、链接、分隔线）
+ */
+function renderMarkdown(md) {
+  const lines = String(md || '').replace(/\r\n?/g, '\n').split('\n');
+  const blocks = [];
+  let listType = null; // 'ul' | 'ol'
+  let listItems = [];
+  let paraLines = [];
+
+  const flushPara = () => {
+    if (paraLines.length > 0) {
+      blocks.push(`<p>${paraLines.map(renderInlineMarkdown).join('<br>')}</p>`);
+      paraLines = [];
+    }
+  };
+
+  const flushList = () => {
+    if (listItems.length > 0 && listType) {
+      blocks.push(`<${listType}>${listItems.map(item => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</${listType}>`);
+      listItems = [];
+      listType = null;
+    }
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      flushPara();
+      flushList();
+      continue;
+    }
+
+    if (/^([-*_])\1{2,}$/.test(line)) {
+      flushPara();
+      flushList();
+      blocks.push('<hr>');
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
+    if (headingMatch) {
+      flushPara();
+      flushList();
+      const tag = headingMatch[1].length <= 2 ? 'h2' : 'h3';
+      blocks.push(`<${tag}>${renderInlineMarkdown(headingMatch[2])}</${tag}>`);
+      continue;
+    }
+
+    const ulMatch = line.match(/^[-*+]\s+(.+)$/);
+    if (ulMatch) {
+      flushPara();
+      if (listType && listType !== 'ul') flushList();
+      listType = 'ul';
+      listItems.push(ulMatch[1]);
+      continue;
+    }
+
+    const olMatch = line.match(/^\d+\.\s+(.+)$/);
+    if (olMatch) {
+      flushPara();
+      if (listType && listType !== 'ol') flushList();
+      listType = 'ol';
+      listItems.push(olMatch[1]);
+      continue;
+    }
+
+    flushList();
+    paraLines.push(line);
+  }
+
+  flushPara();
+  flushList();
+
+  return blocks.join('\n');
+}
+
 /**
  * 获取最新 GitHub Release 元数据（带 5 分钟边缘缓存 + 302 降级防限流）
  */
@@ -237,8 +332,7 @@ async function handleLandingPage(request, ctx) {
   const versionText = meta ? `v${meta.versionName}` : '最新版';
   const sizeText = meta?.apkSize ? `${(meta.apkSize / 1024 / 1024).toFixed(1)} MB` : '';
   const downloadHref = meta ? `/app/${encodeURIComponent(meta.apkName)}` : `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
-  const notesHtml = escapeHtml(meta?.updateLog || '极简漫画风西亚斯教务课表助手，本地直连教务系统，保护账号隐私。')
-    .replace(/\n/g, '<br>');
+  const notesHtml = renderMarkdown(meta?.updateLog || '极简漫画风西亚斯教务课表助手，本地直连教务系统，保护账号隐私。');
 
   const html = `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -263,7 +357,7 @@ async function handleLandingPage(request, ctx) {
     .card {
       position: relative;
       width: 100%;
-      max-width: 440px;
+      max-width: 480px;
       background: #FFF;
       border: 3px solid #000;
       border-radius: 24px;
@@ -302,14 +396,44 @@ async function handleLandingPage(request, ctx) {
       background: #FAFAFA;
       border: 2px solid #E4E4E7;
       border-radius: 14px;
-      padding: 14px 16px;
+      padding: 16px 18px;
       font-size: 14px;
-      line-height: 1.6;
+      line-height: 1.65;
       color: #3F3F46;
       margin-bottom: 24px;
-      max-height: 240px;
+      max-height: 320px;
       overflow-y: auto;
     }
+    .notes h2, .notes h3 {
+      font-size: 15px;
+      font-weight: 900;
+      color: #18181B;
+      margin: 12px 0 6px;
+      padding-left: 8px;
+      border-left: 3px solid #000;
+    }
+    .notes h2:first-child, .notes h3:first-child { margin-top: 0; }
+    .notes p { margin: 6px 0; }
+    .notes p:first-child { margin-top: 0; }
+    .notes p:last-child { margin-bottom: 0; }
+    .notes ul, .notes ol {
+      margin: 6px 0 10px 18px;
+      padding: 0;
+    }
+    .notes ul:last-child, .notes ol:last-child { margin-bottom: 0; }
+    .notes li { margin: 5px 0; }
+    .notes strong { color: #09090B; font-weight: 800; }
+    .notes code {
+      background: #EFEFEF;
+      border: 1px solid #D4D4D8;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-size: 12.5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #18181B;
+    }
+    .notes a { color: #2563EB; text-decoration: underline; }
+    .notes hr { border: 0; border-top: 2px dashed #D4D4D8; margin: 12px 0; }
     .btn {
       display: block;
       width: 100%;
